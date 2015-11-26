@@ -414,3 +414,7 @@ endif
 ifneq (,$(filter phydat,$(USEMODULE)))
   USEMODULE += fmt
 endif
+
+ifneq (,$(filter gnrc_coap,$(USEMODULE)))
+  USEMODULE += gnrc_udp
+endif
