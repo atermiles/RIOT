@@ -319,7 +319,7 @@ kernel_pid_t gnrc_coap_init(void)
         return -EEXIST;
 
     _pid = thread_create(_msg_stack, sizeof(_msg_stack), THREAD_PRIORITY_MAIN - 1,
-                             CREATE_STACKTEST, _event_loop, NULL, "coap");
+                             THREAD_CREATE_STACKTEST, _event_loop, NULL, "coap");
 
     return _pid;
 }
