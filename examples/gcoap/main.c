@@ -27,7 +27,6 @@
 #define MAIN_MSG_QUEUE_SIZE (1)
 
 extern int gcoap_cmd(int argc, char **argv);
-extern kernel_pid_t gnrc_coap_init(void);
 
 static const shell_command_t shell_commands[] = {
     { "coap", "CoAP example", gcoap_cmd },
@@ -37,7 +36,6 @@ static const shell_command_t shell_commands[] = {
 int main(void)
 {
     puts("GNRC CoAP example app");
-    gnrc_coap_init();
     
     /* start shell */
     puts("All up, running the shell now");
