@@ -434,3 +434,7 @@ endif
 ifneq (,$(filter xtimer,$(USEMODULE)))
     FEATURES_REQUIRED += periph_timer
 endif
+
+ifneq (,$(filter gnrc_coap,$(USEMODULE)))
+  USEMODULE += gnrc_udp
+endif
