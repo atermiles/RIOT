@@ -44,6 +44,10 @@ ifneq (,$(filter gnrc_zep,$(USEMODULE)))
   USEMODULE += vtimer
 endif
 
+ifneq (,$(filter gnrc_coap,$(USEMODULE)))
+  USEMODULE += gnrc_udp
+endif
+
 ifneq (,$(filter gnrc_tftp,$(USEMODULE)))
   USEMODULE += gnrc_udp
   USEMODULE += xtimer
