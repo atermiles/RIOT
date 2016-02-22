@@ -84,7 +84,13 @@ extern "C" {
 /**
  * @brief   Base (minimal) RSSI value in dBm
  */
+#ifdef MODULE_AT86RF212B
+#define RSSI_BASE_VAL                   (-99)
+#elif MODULE_AT86RF233
+#define RSSI_BASE_VAL                   (-94)
+#else
 #define RSSI_BASE_VAL                   (-91)
+#endif
 
 /**
  * @brief   Flags for device internal states (see datasheet)
