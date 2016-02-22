@@ -347,6 +347,7 @@ static void _receive_data(at86rf2xx_t *dev)
     at86rf2xx_fb_stop(dev);
     netif->rssi = at86rf2xx_reg_read(dev, AT86RF2XX_REG__PHY_ED_LEVEL);
 #endif
+    netif->rss  = RSSI_BASE_VAL + netif->rssi;
 
     /* finish up and send data to upper layers */
     dev->event_cb(NETDEV_EVENT_RX_COMPLETE, payload);
