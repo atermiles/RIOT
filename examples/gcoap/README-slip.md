@@ -44,7 +44,7 @@ Next, configure the interface on the `aaaa` network on the RIOT router mote.
     
 Finally, set the BR as the RPL DAG root.
 
-    rpl root 1 1
+    rpl root 1 aaaa::1
     
 Ping the TUN interface from the router mote, via the BR:
 

@@ -23,6 +23,16 @@
 #include "net/gnrc/coap.h"
 #include "gnrc_coap_internal.h"
 
+#define ENABLE_DEBUG (0)
+#include "debug.h"
+
+/** @brief Stack size for module thread */
+#if ENABLE_DEBUG
+#define GNRC_COAP_STACK_SIZE (THREAD_STACKSIZE_DEFAULT + THREAD_EXTRA_STACKSIZE_PRINTF)
+#else
+#define GNRC_COAP_STACK_SIZE (THREAD_STACKSIZE_DEFAULT)
+#endif
+
 /* Internal variables and functions */
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
 static char _msg_stack[GNRC_COAP_STACK_SIZE];

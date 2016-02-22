@@ -40,16 +40,6 @@
 extern "C" {
 #endif
 
-#define ENABLE_DEBUG (0)
-#include "debug.h"
-
-/** @brief Stack size for module thread */
-#if ENABLE_DEBUG
-#define GNRC_COAP_STACK_SIZE (THREAD_STACKSIZE_DEFAULT + THREAD_EXTRA_STACKSIZE_PRINTF)
-#else
-#define GNRC_COAP_STACK_SIZE (THREAD_STACKSIZE_DEFAULT)
-#endif
-
 /** @brief Size for module message queue */
 #define GNRC_COAP_MSG_QUEUE_SIZE (4)
 

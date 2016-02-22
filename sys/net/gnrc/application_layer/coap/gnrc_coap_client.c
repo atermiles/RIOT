@@ -23,6 +23,9 @@
 #include "net/gnrc/coap.h"
 #include "gnrc_coap_internal.h"
 
+#define ENABLE_DEBUG (0)
+#include "debug.h"
+
 /** @brief List of registered clients */
 static gnrc_coap_client_t *_client_list = NULL;
 
