@@ -23,6 +23,9 @@
 #include "net/gnrc/sixlowpan/iphc.h"
 #include "net/gnrc/sixlowpan/netif.h"
 #include "net/sixlowpan.h"
+#ifdef MODULE_NETHEAD
+#include "nethead.h"
+#endif
 
 #define ENABLE_DEBUG    (0)
 #include "debug.h"
@@ -83,6 +86,13 @@ static void _receive(gnrc_pktsnip_t *pkt)
     }
 
     pkt = payload;  /* reset pkt from temporary variable */
+
+#ifdef MODULE_NETHEAD
+    gnrc_pktsnip_t *l2hdr;
+    LL_SEARCH_SCALAR(payload, l2hdr, type, GNRC_NETTYPE_NETIF);
+    if (l2hdr != NULL)
+        nethead_post_l2(l2hdr->data, l2hdr->size);
+#endif    
 
     LL_SEARCH_SCALAR(pkt, payload, type, GNRC_NETTYPE_SIXLOWPAN);
 
@@ -165,6 +175,7 @@ static void _receive(gnrc_pktsnip_t *pkt)
         gnrc_pktbuf_release(pkt);
         return;
     }
+
     if (!gnrc_netapi_dispatch_receive(GNRC_NETTYPE_IPV6, GNRC_NETREG_DEMUX_CTX_ALL, pkt)) {
         DEBUG("6lo: No receivers for this packet found\n");
         gnrc_pktbuf_release(pkt);
