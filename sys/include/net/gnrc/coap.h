@@ -65,26 +65,6 @@ extern "C" {
 #define GNRC_COAP_PAYLOAD_DELTA (0xF)
 
 /**
- *  @brief Bitmask for a gnrc_coap_code_t request code
- */
-#define GNRC_COAP_CLASS_REQUEST (0x00)
-
-/**
- *  @brief Bitmask for a gnrc_coap_code_t success response code
- */
-#define GNRC_COAP_CLASS_SUCCESS (0x40)
-
-/**
- *  @brief Bitmask for a gnrc_coap_code_t client failure response code
- */
-#define GNRC_COAP_CLASS_CLIENT_FAILURE (0x80)
-
-/**
- *  @brief Bitmask for a gnrc_coap_code_t server failure response code
- */
-#define GNRC_COAP_CLASS_SERVER_FAILURE (0xA0)
-
-/**
  *  @brief Message type enum -- confirmable, non-confirmable, etc.
  */
 typedef enum
@@ -103,17 +83,20 @@ typedef enum
 {
     GNRC_COAP_CODE_EMPTY   = 0x00,
     // request
-    GNRC_COAP_CODE_GET     = 0x01,
-    GNRC_COAP_CODE_POST    = 0x02,
-    GNRC_COAP_CODE_PUT     = 0x03,
-    GNRC_COAP_CODE_DELETE  = 0x04,
+    GNRC_COAP_CLASS_REQUEST = 0x00,
+    GNRC_COAP_CODE_GET      = 0x01,
+    GNRC_COAP_CODE_POST     = 0x02,
+    GNRC_COAP_CODE_PUT      = 0x03,
+    GNRC_COAP_CODE_DELETE   = 0x04,
     // success response
-    GNRC_COAP_CODE_CREATED = 0x41,
-    GNRC_COAP_CODE_DELETED = 0x42,
-    GNRC_COAP_CODE_VALID   = 0x43,
-    GNRC_COAP_CODE_CHANGED = 0x44,
-    GNRC_COAP_CODE_CONTENT = 0x45,
+    GNRC_COAP_CLASS_SUCCESS = 0x40,
+    GNRC_COAP_CODE_CREATED  = 0x41,
+    GNRC_COAP_CODE_DELETED  = 0x42,
+    GNRC_COAP_CODE_VALID    = 0x43,
+    GNRC_COAP_CODE_CHANGED  = 0x44,
+    GNRC_COAP_CODE_CONTENT  = 0x45,
     // client error response
+    GNRC_COAP_CLASS_CLIENT_FAILURE            = 0x80,
     GNRC_COAP_CODE_BAD_REQUEST                = 0x80,
     GNRC_COAP_CODE_UNAUTHORIZED               = 0x81,
     GNRC_COAP_CODE_BAD_OPTION                 = 0x82,
@@ -125,6 +108,7 @@ typedef enum
     GNRC_COAP_CODE_REQUEST_ENTITY_TOO_LARGE   = 0x8D,
     GNRC_COAP_CODE_UNSUPPORTED_CONTENT_FORMAT = 0x8F,
     // server error response
+    GNRC_COAP_CLASS_SERVER_FAILURE        = 0xA0,
     GNRC_COAP_CODE_INTERNAL_SERVER_ERROR  = 0xA0,
     GNRC_COAP_CODE_NOT_IMPLEMENTED        = 0xA1,
     GNRC_COAP_CODE_BAD_GATEWAY            = 0xA2,
@@ -154,9 +138,22 @@ typedef enum
     GNRC_COAP_FORMAT_XML   = 41,
     GNRC_COAP_FORMAT_OCTET = 42,
     GNRC_COAP_FORMAT_EXI   = 47,
-    GNRC_COAP_FORMAT_JSON  = 50
+    GNRC_COAP_FORMAT_JSON  = 50,
+    GNRC_COAP_FORMAT_CBOR  = 60
 }
 gnrc_coap_media_type_t;
+
+/**
+ *  @brief Enum for state of resource transfer via exchange of messages
+ */
+typedef enum
+{
+    GNRC_COAP_XFER_INIT,      /**< No  messaging yet */
+    GNRC_COAP_XFER_REQ,       /**< Request sent */
+    GNRC_COAP_XFER_FAIL,      /**< Request failed */
+    GNRC_COAP_XFER_SUCCESS    /**< Got response; acknowledged */
+}
+gnrc_coap_xfer_state_t;
 
 /**
  * @brief   Initial fixed fields in a CoAP message header
@@ -194,37 +191,48 @@ typedef struct __attribute__((packed)) {
  * Useful for sending to a client, or as received from a server.
  */
 typedef struct {
-    gnrc_coap_code_t xfer_code;  /**< Transfer type: GET, POST, etc */
-    char *path;            /**< Path to resource */
-    size_t pathlen;        /**< Length of path, to make it safer to read path */
-    uint8_t *data;         /**< Data for resource representation */
-    size_t datalen;        /**< Length of data */
+    uint8_t token[GNRC_COAP_MAX_TKLEN];  /**< Conversation token */
+    uint8_t tokenlen;                    /**< Length of token */
+    gnrc_coap_xfer_state_t xfer_state;   /**< State of messaging to complete this transfer */
+    gnrc_coap_code_t xfer_code;          /**< Transfer type: GET, POST, etc */
+    char *path;                          /**< Path to resource */
+    size_t pathlen;                      /**< Length of path, to make it safer to read path */
+    uint8_t *data;                       /**< Data for resource representation */
+    size_t datalen;                      /**< Length of data */
     gnrc_coap_media_type_t data_format;  /**< Format for data, defaults to octet */
 } gnrc_coap_transfer_t;
+
+/**
+ * @brief   Listener for incoming messages, whether unsolicited to a server or 
+ *          an expected response to a sender.
+ * 
+ * The network registration allows demuxing among listeners by supporting use 
+ * of a unique source port per listener.
+ */
+typedef struct coap_listener {
+    gnrc_netreg_entry_t netreg;          /**< Network registration for port */
+    void (*response_cbf)(gnrc_coap_transfer_t*);    /**< Response callback */
+    struct coap_listener *next;          /**< Next member in list; allows for registrar */
+} gnrc_coap_listener_t;
+
+/**
+ * @brief   A message sender, which also may listen for a response.
+ * 
+ * A sender may be a client sending a request, or a server sending a response.
+ */
+typedef struct coap_sender {
+    gnrc_coap_listener_t listener;       /**< Listens for a response from the receiver */
+    gnrc_coap_transfer_t xfer;           /**< Active transfer */
+} gnrc_coap_sender_t;
 
 /**
  * @brief   Setup for listening for requests as a CoAP server.
  */
 typedef struct {
-    gnrc_netreg_entry_t netreg;    /**< Network registration for port */
-    void (*get_cbf)(void);         /**< GET request callback */
-    void (*set_cbf)(void);         /**< PUT/POST request callback */
+    gnrc_coap_listener_t *listener;    /**< Listens for client requests */
+    void (*get_cbf)(void);             /**< GET request callback */
+    void (*set_cbf)(void);             /**< PUT/POST request callback */
 } gnrc_coap_server_t;
-
-/**
- * @brief   Setup for sending requests and receiving responses on a port as a CoAP 
- *          client.
- * 
- * The network registration allows demuxing among clients by supporting use of 
- * a unique ephemeral source port per client. The message ID attribute supports 
- * matching a server resposn with the last request from the client.
- */
-typedef struct coap_client {
-    gnrc_netreg_entry_t netreg;        /**< Network registration for port */
-    network_uint16_t last_msgid;       /**< Message ID for outstanding request */
-    void (*response_cbf)(gnrc_coap_transfer_t*);    /**< Response callback */
-    struct coap_client *next;          /**< Next member in list */
-} gnrc_coap_client_t;
 
 
 /**
@@ -272,6 +280,19 @@ int gnrc_coap_register_client(gnrc_coap_client_t *client);
  * @return -EINVAL if a server already is listening, or port number not valid
  */                                                             
 int gnrc_coap_start_server(gnrc_coap_server_t *server);
+
+/**
+ * @brief  Verifies a method/response code as a member of a class of these codes.
+ * 
+ * @param[in]  code  Method/Response code to be verified
+ * @param[in]  class Class to test for membership
+ * 
+ * @return true on success
+ */
+inline bool gnrc_coap_is_class(gnrc_coap_code_t code, gnrc_coap_code_t class)
+{
+    return code >= class && code <= (class + 0xF);
+}
 
 /**
  * @brief   Initializes the gnrc_coap thread and device.
