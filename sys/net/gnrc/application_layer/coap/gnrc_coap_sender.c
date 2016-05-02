@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Ken Bannister. All rights reserved.
+ * Copyright (c) 2015-2016 Ken Bannister. All rights reserved.
  *  
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -26,8 +26,8 @@
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
-/** @brief List of registered clients */
-static gnrc_coap_client_t *_client_list = NULL;
+/** @brief List of registered listeners for responses */
+static gnrc_coap_listener_t *_listener_list = NULL;
 
 /* 
  * gnrc_coap internal functions
@@ -45,12 +45,15 @@ gnrc_coap_client_t *gnrc_coap_client_find(uint16_t port)
  * gnrc_coap interface functions
  */
 
-size_t gnrc_coap_send(gnrc_coap_client_t *client, ipv6_addr_t *addr, uint16_t port, 
-                                                                gnrc_coap_transfer_t *xfer)
+size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t port, 
+                                                         gnrc_coap_transfer_t *xfer)
 {
     uint8_t srcport[2], dstport[2];             /* Bytes for UDP header function */
     gnrc_pktsnip_t *payload, *coap, *udp, *ip;
     size_t pktlen;
+    
+    /* register listener if necessary */
+    gnrc_coap_register_listener(sender->listener);
 
     /* allocate payload */
     if (xfer->datalen > 0) {
@@ -72,8 +75,8 @@ size_t gnrc_coap_send(gnrc_coap_client_t *client, ipv6_addr_t *addr, uint16_t po
     }
 
     /* allocate UDP header */
-    srcport[0] = (uint8_t)client->netreg.demux_ctx;
-    srcport[1] = client->netreg.demux_ctx >> 8;
+    srcport[0] = (uint8_t)sender->listener.netreg.demux_ctx;
+    srcport[1] = sender->listener.netreg.demux_ctx >> 8;
     dstport[0] = (uint8_t)port;
     dstport[1] = port >> 8;
     
@@ -102,37 +105,29 @@ size_t gnrc_coap_send(gnrc_coap_client_t *client, ipv6_addr_t *addr, uint16_t po
     return pktlen;
 }
 
-int gnrc_coap_register_client(gnrc_coap_client_t *client) {
-    if (client->netreg.pid == gnrc_coap_pid_get()) {
-        DEBUG("coap: client already started on port %" PRIu32 "\n",
-               client->netreg.demux_ctx);
-        return -EINVAL;
-    }
-    /* To be safe, verify not already in client list. */
-    DEBUG("coap: searching client list\n");
-    gnrc_coap_client_t *i_client;
-    LL_FOREACH(_client_list, i_client) {
-        if (i_client == client) {
-            DEBUG("coap: client already in list for port %" PRIu32 "\n",
-                   client->netreg.demux_ctx);
-            return -EINVAL;
-        }
+int gnrc_coap_register_listener(gnrc_coap_listener_t *listener)
+{
+    if (listener->netreg.pid == gnrc_coap_pid_get()) {
+        DEBUG("coap: listener already registered for port %" PRIu32 "\n",
+               listener->netreg.demux_ctx);
+        return -EALREADY;
     }
 
-    /* Find an unused ephemeral port and add to client list */
-    client->netreg.demux_ctx = GNRC_COAP_EPHEMERAL_PORT_MIN;
+    /* Find an unused ephemeral port and add to listener list */
+    listener->netreg.demux_ctx = GNRC_COAP_EPHEMERAL_PORT_MIN;
     
-    while (client->netreg.pid != gnrc_coap_pid_get()) {
+    while (listener->netreg.pid != gnrc_coap_pid_get()) {
         gnrc_netreg_entry_t *lookup;
-        lookup = gnrc_netreg_lookup(GNRC_NETTYPE_UDP, client->netreg.demux_ctx);
+        lookup = gnrc_netreg_lookup(GNRC_NETTYPE_UDP, listener->netreg.demux_ctx);
         if (lookup == NULL) {
-            LL_APPEND(_client_list, client);
-            client->netreg.pid = gnrc_coap_pid_get();
-            gnrc_netreg_register(GNRC_NETTYPE_UDP, &client->netreg);
-            DEBUG("coap: registered client to port %" PRIu32 "\n",
-                   client->netreg.demux_ctx);
+            LL_APPEND(_listener_list, listener);
+            listener->netreg.pid = gnrc_coap_pid_get();
+            gnrc_netreg_register(GNRC_NETTYPE_UDP, &listener->netreg);
+            DEBUG("coap: registered listener to port %" PRIu32 "\n",
+                   listener->netreg.demux_ctx);
         } else {
-            client->netreg.demux_ctx++;
+            /* Try next port number */
+            listener->netreg.demux_ctx++;
         }
     }
     return 0;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Ken Bannister. All rights reserved.
+ * Copyright (c) 2015-2016 Ken Bannister. All rights reserved.
  *  
  * Released under the Mozilla Public License 2.0, as published at the link below.
  * http://opensource.org/licenses/MPL-2.0
@@ -27,7 +27,8 @@
 static void handle_response(gnrc_coap_transfer_t *xfer);
 
 static gnrc_coap_server_t server = { {NULL, 0, KERNEL_PID_UNDEF}, NULL, NULL};
-static gnrc_coap_client_t client = { {NULL, 0, KERNEL_PID_UNDEF}, {0}, handle_response, NULL};
+static gnrc_coap_sender_t sender = { 0, 0, {0}, 0, NULL, 
+                                     {KERNEL_PID_UNDEF, handle_response, NULL} };
 
 
 static void handle_response(gnrc_coap_transfer_t *xfer)
@@ -67,13 +68,9 @@ static void send(char *addr_str, char *port_str, gnrc_coap_transfer_t *xfer)
         puts("Error: unable to parse destination port");
         return;
     }
-    
-    if (client.netreg.pid == KERNEL_PID_UNDEF) {
-        gnrc_coap_register_client(&client);
-    }
 
     puts("gcoap: about to send");
-    bytes_sent = gnrc_coap_send(&client, &addr, port, xfer);
+    bytes_sent = gnrc_coap_send(&sender, &addr, port, xfer);
     if (bytes_sent > 0)
         printf("gcoap: msg sent, %u bytes\n", bytes_sent);
     else
@@ -101,7 +98,7 @@ int gcoap_cmd(int argc, char **argv)
     /* Ordered as in the gnrc_coap_code_t enum, for easier processing */
     char *methods[] = {"get", "post", "put"}; 
     size_t i;
-    gnrc_coap_transfer_t xfer = {0, NULL, 0, NULL, 0, 0};
+    gnrc_coap_transfer_t xfer = {0, 0, NULL, 0, NULL, 0};
     
     if (argc == 1)
         goto end;

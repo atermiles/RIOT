@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Ken Bannister. All rights reserved.
+ * Copyright (c) 2015-2016 Ken Bannister. All rights reserved.
  *  
  * This file is subject to the terms and conditions of the GNU Lesser
  * General Public License v2.1. See the file LICENSE in the top level
@@ -203,6 +203,7 @@ static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_transfer_t *xfer)
     uint8_t coap_type, token_len, *data, hdrlen = 0;
     uint16_t opt_delta = 0, optnum = 0;
     
+    /* TODO Reject if not a CoAP packet. May be intended for some other app .*/
     hdr4      = (gnrc_coap_hdr_t *)snip->data;
     coap_type = (hdr4->ver_type_tkl & 0x30) >> 4;
     token_len =  hdr4->ver_type_tkl & 0x0F;
