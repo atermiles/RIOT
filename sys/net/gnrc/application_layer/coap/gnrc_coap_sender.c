@@ -33,12 +33,12 @@ static gnrc_coap_listener_t *_listener_list = NULL;
  * gnrc_coap internal functions
  */
 
-gnrc_coap_client_t *gnrc_coap_client_find(uint16_t port)
+gnrc_coap_listener_t *gnrc_coap_listener_find(uint16_t port)
 {
-    gnrc_coap_client_t *client;
+    gnrc_coap_listener_t *listener;
     
-    LL_SEARCH_SCALAR(_client_list, client, netreg.demux_ctx, port);
-    return client;
+    LL_SEARCH_SCALAR(_listener_list, listener, netreg.demux_ctx, port);
+    return listener;
 }
 
 /* 
@@ -53,7 +53,7 @@ size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t po
     size_t pktlen;
     
     /* register listener if necessary */
-    gnrc_coap_register_listener(sender->listener);
+    gnrc_coap_register_listener(&sender->listener);
 
     /* allocate payload */
     if (xfer->datalen > 0) {
@@ -67,7 +67,7 @@ size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t po
     }
    
     /* allocate CoAP header */
-    coap = gnrc_coap_hdr_build(payload, xfer);
+    coap = gnrc_coap_hdr_build(&sender->msg_meta, xfer, payload);
     if (coap == NULL) {
         DEBUG("coap: unable to allocate CoAP header\n");
         gnrc_pktbuf_release(payload);
@@ -113,6 +113,8 @@ int gnrc_coap_register_listener(gnrc_coap_listener_t *listener)
         return -EALREADY;
     }
 
+    /* TODO Handle reduced port range for UDP compression; and in that context, */
+    /*      handle when no ports available */
     /* Find an unused ephemeral port and add to listener list */
     listener->netreg.demux_ctx = GNRC_COAP_EPHEMERAL_PORT_MIN;
     

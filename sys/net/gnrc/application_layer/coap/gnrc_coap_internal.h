@@ -31,12 +31,12 @@
 kernel_pid_t gnrc_coap_pid_get(void);
 
 /** 
- * @brief Finds a registered client.
+ * @brief Finds a registered listener.
  * 
- * @param[in] port    Epermeral source port used by the client
- * @return            The matching client, or NULL if not found
+ * @param[in] port    Epermeral source port used by the listener
+ * @return            The matching listener, or NULL if not found
  */
-gnrc_coap_client_t *gnrc_coap_client_find(uint16_t port);
+gnrc_coap_listener_t *gnrc_coap_listener_find(uint16_t port);
 
 #ifdef __cplusplus
 extern "C" {

@@ -28,19 +28,21 @@
 
 int gnrc_coap_start_server(gnrc_coap_server_t *server)
 {
+    gnrc_coap_listener_t *listener = &server->listener;
+    
     /* check if server is already started */
-    if (server->netreg.pid == gnrc_coap_pid_get()) {
+    if (listener->netreg.pid == gnrc_coap_pid_get()) {
         DEBUG("coap: server already started on port %" PRIu32 "\n",
-               server->netreg.demux_ctx);
+               listener->netreg.demux_ctx);
         return -EINVAL;
     }
 
-    if (server->netreg.demux_ctx > UINT16_MAX) {
-        DEBUG("coap: invalid port: %" PRIu32 "\n", server->netreg.demux_ctx);
+    if (listener->netreg.demux_ctx > UINT16_MAX) {
+        DEBUG("coap: invalid port: %" PRIu32 "\n", listener->netreg.demux_ctx);
         return -EINVAL;
     }
         
-    server->netreg.pid = gnrc_coap_pid_get();
-    gnrc_netreg_register(GNRC_NETTYPE_UDP, &server->netreg);
+    listener->netreg.pid = gnrc_coap_pid_get();
+    gnrc_netreg_register(GNRC_NETTYPE_UDP, &listener->netreg);
     return 0;
 }

@@ -37,12 +37,12 @@
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
 static char _msg_stack[GNRC_COAP_STACK_SIZE];
 
-static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_transfer_t *xfer);
+static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer);
 static void *_event_loop(void *arg);
 static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer);
 static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval, 
                                                             uint8_t optlen);
-/* static void _coap_hdr_print(gnrc_coap_hdr_t *hdr); */
+/* static void _coap_hdr_print(gnrc_coap_hdr4_t *hdr); */
 
 /**
  * @brief Event/Message loop for gnrc_coap _pid thread.
@@ -52,7 +52,8 @@ static void *_event_loop(void *arg)
     msg_t msg_rcvd, msg_queue[GNRC_COAP_MSG_QUEUE_SIZE];
     gnrc_pktsnip_t *pkt, *udp_snip;
     uint16_t port;
-    gnrc_coap_client_t *client;
+    gnrc_coap_listener_t *listener;
+    gnrc_coap_meta_t msg_meta;
     gnrc_coap_transfer_t xfer;
     int result;
 
@@ -76,24 +77,24 @@ static void *_event_loop(void *arg)
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
-                port   = byteorder_ntohs(((udp_hdr_t *)udp_snip->data)->dst_port);
-                client = gnrc_coap_client_find(port);
-                if (!client) {
-                    DEBUG("coap: client not found for port: %u\n", port);
+                port     = byteorder_ntohs(((udp_hdr_t *)udp_snip->data)->dst_port);
+                listener = gnrc_coap_listener_find(port);
+                if (!listener) {
+                    DEBUG("coap: listener not found for port: %u\n", port);
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
-                /* _coap_hdr_print((gnrc_coap_hdr_t *)pkt->data); */
+                /* _coap_hdr_print((gnrc_coap_hdr4_t *)pkt->data); */
                 
-                /* parse the message and pass to the client */
-                result =_coap_parse(pkt, &xfer);
+                /* parse the message and pass to the listener */
+                result =_coap_parse(pkt, &msg_meta, &xfer);
                 if (result < 0) {
                     DEBUG("coap: parse failure: %d\n", result);
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
-                if (client->response_cbf)
-                    client->response_cbf(&xfer);
+                if (listener->response_cbf)
+                    listener->response_cbf(&msg_meta, &xfer);
                 gnrc_pktbuf_release(pkt);
                 break;
                 
@@ -175,7 +176,7 @@ static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer)
 }
 
 /*
-static void _coap_hdr_print(gnrc_coap_hdr_t *hdr)
+static void _coap_hdr_print(gnrc_coap_hdr4_t *hdr)
 {
     uint8_t coap_ver, coap_type, token_len;
     
@@ -193,27 +194,28 @@ static void _coap_hdr_print(gnrc_coap_hdr_t *hdr)
  * @brief Parse CoAP parameters from header+payload bytes
  * 
  * @param[in] snip      Contents of CoAP header and payload
- * @param[inout] xfer   Target for parsed information
+ * @param[inout] meta   Target for metadata in parsed information
+ * @param[inout] xfer   Target for data in parsed information
  * 
  * @return    0 on success; negative errno on failure
  */
-static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_transfer_t *xfer)
+static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer)
 {
-    gnrc_coap_hdr_t *hdr4;    /* 4 byte static portion of header */
-    uint8_t coap_type, token_len, *data, hdrlen = 0;
+    gnrc_coap_hdr4_t *hdr;
+    uint8_t coap_type, *data, hdrlen = 0;
     uint16_t opt_delta = 0, optnum = 0;
     
     /* TODO Reject if not a CoAP packet. May be intended for some other app .*/
-    hdr4      = (gnrc_coap_hdr_t *)snip->data;
-    coap_type = (hdr4->ver_type_tkl & 0x30) >> 4;
-    token_len =  hdr4->ver_type_tkl & 0x0F;
+    hdr                = (gnrc_coap_hdr4_t *)snip->data;
+    coap_type          = (hdr->ver_type_tkl & 0x30) >> 4;
+    msg_meta->tokenlen =  hdr->ver_type_tkl & 0x0F;
     if (coap_type != GNRC_COAP_TYPE_NON)
         return -EINVAL;
 
-    xfer->xfer_code = hdr4->code_class;
+    msg_meta->xfer_code = hdr->code;
     
     /* read/skip token and options */
-    hdrlen = sizeof(gnrc_coap_hdr_t) + token_len;
+    hdrlen = sizeof(gnrc_coap_hdr4_t) + msg_meta->tokenlen;
     data   = (uint8_t *)snip->data + hdrlen;
     while (hdrlen < snip->size && opt_delta != GNRC_COAP_PAYLOAD_DELTA) {
         opt_delta = (*data & 0xF0) >> 4;        /* assume not extended (13/14) */
@@ -287,11 +289,12 @@ kernel_pid_t gnrc_coap_pid_get(void) {
  * gnrc_coap interface functions
  */
  
-gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_pktsnip_t *payload, gnrc_coap_transfer_t *xfer)
+gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer,
+                                                                gnrc_pktsnip_t *payload)
 {
     gnrc_pktsnip_t *hdr;
     size_t hdr_len;
-    gnrc_coap_hdr_t *hdr4;   /* 4 byte static portion of header */
+    gnrc_coap_hdr4_t *hdr4;   /* 4 byte static portion of header */
     uint8_t *varflds;
     int optlen;
     
@@ -303,19 +306,19 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_pktsnip_t *payload, gnrc_coap_transfer_
     }
 
     /* allocate header */
-    hdr_len = sizeof(gnrc_coap_hdr_t) + optlen + (payload == NULL ? 0 : 1);
+    hdr_len = sizeof(gnrc_coap_hdr4_t) + optlen + (payload == NULL ? 0 : 1);
     hdr     = gnrc_pktbuf_add(payload, NULL, hdr_len, GNRC_NETTYPE_UNDEF);
     if (hdr == NULL)
         return NULL;
 
     /* write initial static fields */
-    hdr4               = (gnrc_coap_hdr_t *)hdr->data;
+    hdr4               = (gnrc_coap_hdr4_t *)hdr->data;
     hdr4->ver_type_tkl = (GNRC_COAP_VERSION << 6) + (GNRC_COAP_TYPE_NON << 4) + 0;
-    hdr4->code_class   = xfer->xfer_code;
+    hdr4->code         = msg_meta->xfer_code;
     hdr4->message_id   = byteorder_htons(1);
     
     /* write variable fields, starting with options */
-    varflds = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr_t);
+    varflds = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr4_t);
     _do_options(varflds, xfer);
     
     if (payload != NULL)

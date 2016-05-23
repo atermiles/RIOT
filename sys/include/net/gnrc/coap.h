@@ -156,7 +156,7 @@ typedef enum
 gnrc_coap_xfer_state_t;
 
 /**
- * @brief   Initial fixed fields in a CoAP message header
+ * @brief   Initial fixed fields in a CoAP message header (4 bytes)
  *
  * @details Header structure shown below. Includes only static fields through 
  * Message ID, to support use within a pktsnip_t:
@@ -181,18 +181,27 @@ gnrc_coap_xfer_state_t;
  */
 typedef struct __attribute__((packed)) {
     uint8_t ver_type_tkl;                /**< CoAP version, message type, token length */
-    uint8_t code_class;                  /**< Message code, code detail */
+    uint8_t code;                        /**< Message code, code detail */
     network_uint16_t message_id;         /**< Message ID */
-    /* TODO Add token */
-} gnrc_coap_hdr_t;
+} gnrc_coap_hdr4_t;
 
 /**
- * @brief   A representation of a resource transfer to/from some host.
+ * @brief   Message metadata used in a CoAP header.
+ */
+typedef struct {
+    coap_msg_type_t msg_type;            /**< Type of message: confirmable, ack, etc */
+    gnrc_coap_code_t xfer_code;          /**< Transfer code: GET, POST, etc, or response */
+    network_uint16_t message_id;         /**< Message ID */
+    uint8_t token[GNRC_COAP_MAX_TKLEN];  /**< Conversation token */
+    uint8_t tokenlen;                    /**< Length of token */
+} gnrc_coap_meta_t;
+
+/**
+ * @brief   Resource representation for transfer to/from some host
  * 
  * Useful for sending to a client, or as received from a server.
  */
 typedef struct {
-    gnrc_coap_code_t xfer_code;          /**< Transfer type: GET, POST, etc */
     char *path;                          /**< Path to resource */
     size_t pathlen;                      /**< Length of path, to make it safer to read path */
     uint8_t *data;                       /**< Data for resource representation */
@@ -209,7 +218,8 @@ typedef struct {
  */
 typedef struct coap_listener {
     gnrc_netreg_entry_t netreg;          /**< Network registration for port */
-    void (*response_cbf)(gnrc_coap_transfer_t*);    /**< Response callback */
+    void (*response_cbf)(gnrc_coap_meta_t*, gnrc_coap_transfer_t*);    
+                                         /**< Response callback */
     struct coap_listener *next;          /**< Next member in list; allows for registrar */
 } gnrc_coap_listener_t;
 
@@ -221,9 +231,7 @@ typedef struct coap_listener {
  */
 typedef struct {
     gnrc_coap_xfer_state_t xfer_state;   /**< State of messaging to complete the transfer */
-    network_uint16_t message_id;         /**< Message ID */
-    uint8_t token[GNRC_COAP_MAX_TKLEN];  /**< Conversation token */
-    uint8_t tokenlen;                    /**< Length of token */
+    gnrc_coap_meta_t msg_meta;           /**< Message metadata for header */
     gnrc_coap_transfer_t *xfer;          /**< Transfer details (optional, for retries) */
     gnrc_coap_listener_t listener;       /**< Listens for a response from the receiver */
 } gnrc_coap_sender_t;
@@ -232,9 +240,9 @@ typedef struct {
  * @brief   Setup for listening for requests as a CoAP server.
  */
 typedef struct {
-    gnrc_coap_listener_t *listener;    /**< Listens for client requests */
-    void (*get_cbf)(void);             /**< GET request callback */
-    void (*set_cbf)(void);             /**< PUT/POST request callback */
+    gnrc_coap_listener_t listener;       /**< Listens for client requests */
+    void (*get_cbf)(void);               /**< GET request callback */
+    void (*set_cbf)(void);               /**< PUT/POST request callback */
 } gnrc_coap_server_t;
 
 
@@ -243,25 +251,27 @@ typedef struct {
  * 
  * Assumes a non-confirmable message with no token.
  *
+ * @param[in] msg_meta Message metadata, including code
+ * @param[in] xfer     Resource transfer path, and value
  * @param[in] payload  Payload contained in the CoAP message
- * @param[in] xfer     Resource transfer type, path, and value
  * 
  * @return  pointer to the newly created (and allocated) header
  * @return  NULL on allocation error or invalid CoAP option
  */
-gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_pktsnip_t *payload, gnrc_coap_transfer_t *xfer);
+gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer, 
+                                                                gnrc_pktsnip_t *payload);
 
 /**
  * @brief   Sends a resource, or sends a request for a resource to a host.
  *
- * @param[in] client  CoAP client sending resource
+ * @param[in] client  CoAP sender for resource
  * @param[in] addr    Destination host address
  * @param[in] port    Destination port
  * @param[in] xfer    Resource transfer type (GET,POST,etc), path, and data
 
  * @return  Size of packet sent on success, or zero on failure.
  */
-size_t gnrc_coap_send(gnrc_coap_client_t *client, ipv6_addr_t *addr, uint16_t port, 
+size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t port, 
                                                   gnrc_coap_transfer_t *xfer);
 
 /**
@@ -270,7 +280,7 @@ size_t gnrc_coap_send(gnrc_coap_client_t *client, ipv6_addr_t *addr, uint16_t po
  * @param[inout] listener  Listener parameters; updates gnrc_coap pid and port
  * 
  * @return 0 on success
- * @return -EALREADY if client already is registered
+ * @return -EALREADY if listener already is registered
  */                                                             
 int gnrc_coap_register_listener(gnrc_coap_listener_t *listener);
 

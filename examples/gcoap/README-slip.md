@@ -1,5 +1,15 @@
-# SLIP Border Router Setup
 `Makefile.slip` assumes use of SAMR21 Xplained Pro. This file describes how we use the board as a border router. See the README for the gnrc_border_router example for more background.
+
+## Background -- Building
+Build commands, for reference:
+
+    cd dev/riot/repo/examples/gcoap/
+    ../../dist/tools/usb-serial/list-ttys.sh
+    make clean BOARD="samr21-xpro"
+    make BOARD="samr21-xpro"
+    # serial value from list-ttys.sh above
+    make -f Makefile.slip flash BOARD="samr21-xpro" SERIAL="????"
+    make term BOARD="samr21-xpro" PORT="/dev/ttyACM0"
 
 ## USB serial port
 The USB serial port requires a USB-TTL converter cable with 3.3 V output.

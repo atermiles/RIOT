@@ -24,19 +24,20 @@
 #include "net/gnrc/coap.h"
 #include "od.h"
 
-static void handle_response(gnrc_coap_transfer_t *xfer);
+static void handle_response(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer);
 
-static gnrc_coap_server_t server = { {NULL, 0, KERNEL_PID_UNDEF}, NULL, NULL};
-static gnrc_coap_sender_t sender = { 0, 0, {0}, 0, NULL, 
-                                     {KERNEL_PID_UNDEF, handle_response, NULL} };
+static gnrc_coap_server_t server = { {{NULL, 0, KERNEL_PID_UNDEF}, NULL, NULL}, NULL, NULL };
+static gnrc_coap_sender_t sender = { .xfer_state = 0, 
+                                     .msg_meta   = {GNRC_COAP_TYPE_NON, 0, {0}, {0}, 0}, 
+                                     .xfer       = NULL, 
+                                     .listener   = {{NULL, 0, KERNEL_PID_UNDEF}, handle_response, NULL} };
 
-
-static void handle_response(gnrc_coap_transfer_t *xfer)
+static void handle_response(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer)
 {
-    char *class_str = (xfer->xfer_code & GNRC_COAP_CLASS_SUCCESS) ? "success" : "error";
-    printf("gcoap: %s, code %1" PRIu8 ".%02" PRIu8, class_str, 
-                                                   (xfer->xfer_code & 0xE0) >> 5,
-                                                    xfer->xfer_code & 0x1F);
+    char *class_str = (msg_meta->xfer_code & GNRC_COAP_CLASS_SUCCESS) ? "success" : "error";
+    printf("gcoap: %s, code %1u.%02u", class_str, 
+                                                   (msg_meta->xfer_code & 0xE0) >> 5,
+                                                    msg_meta->xfer_code & 0x1F);
     if (xfer->datalen > 0) {
         if (xfer->data_format == GNRC_COAP_FORMAT_TEXT
                 || xfer->data_format == GNRC_COAP_FORMAT_LINK) {
@@ -88,7 +89,7 @@ static void start_server(char *port_str)
         return;
     }
     /* start server */
-    server.netreg.demux_ctx = (uint32_t)port;
+    server.listener.netreg.demux_ctx = (uint32_t)port;
     gnrc_coap_start_server(&server);
     printf("gcoap: started CoAP server on port %" PRIu16 "\n", port);
 }
@@ -98,7 +99,7 @@ int gcoap_cmd(int argc, char **argv)
     /* Ordered as in the gnrc_coap_code_t enum, for easier processing */
     char *methods[] = {"get", "post", "put"}; 
     size_t i;
-    gnrc_coap_transfer_t xfer = {0, 0, NULL, 0, NULL, 0};
+    gnrc_coap_transfer_t xfer = {NULL, 0, NULL, 0, 0};
     
     if (argc == 1)
         goto end;
@@ -107,9 +108,9 @@ int gcoap_cmd(int argc, char **argv)
     for (i = 0; i < sizeof(methods); i++) {
         if (strcmp(argv[1], methods[i]) == 0) {
             if (argc == 5 || argc == 6) {
-                xfer.xfer_code = (gnrc_coap_code_t)(i+1);
-                xfer.path      = argv[4];
-                xfer.pathlen   = strlen(argv[4]);
+                sender.msg_meta.xfer_code = (gnrc_coap_code_t)(i+1);
+                xfer.path                 = argv[4];
+                xfer.pathlen              = strlen(argv[4]);
                 if (argc == 6) {
                     xfer.data        = (uint8_t *)argv[5];
                     xfer.datalen     = strlen(argv[5]);
