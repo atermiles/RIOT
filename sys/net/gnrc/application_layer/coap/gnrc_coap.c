@@ -42,6 +42,7 @@ static void *_event_loop(void *arg);
 static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer);
 static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval, 
                                                             uint8_t optlen);
+static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener);
 /* static void _coap_hdr_print(gnrc_coap_hdr4_t *hdr); */
 
 /**
@@ -53,9 +54,6 @@ static void *_event_loop(void *arg)
     gnrc_pktsnip_t *pkt, *udp_snip;
     uint16_t port;
     gnrc_coap_listener_t *listener;
-    gnrc_coap_meta_t msg_meta;
-    gnrc_coap_transfer_t xfer;
-    int result;
 
     (void)arg;
     msg_init_queue(msg_queue, GNRC_COAP_MSG_QUEUE_SIZE);
@@ -84,18 +82,9 @@ static void *_event_loop(void *arg)
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
-                /* _coap_hdr_print((gnrc_coap_hdr4_t *)pkt->data); */
                 
-                /* parse the message and pass to the listener */
-                result =_coap_parse(pkt, &msg_meta, &xfer);
-                if (result < 0) {
-                    DEBUG("coap: parse failure: %d\n", result);
-                    gnrc_pktbuf_release(pkt);
-                    break;
-                }
-                if (listener->response_cbf)
-                    listener->response_cbf(&msg_meta, &xfer);
-                gnrc_pktbuf_release(pkt);
+                /* _coap_hdr_print((gnrc_coap_hdr4_t *)pkt->data); */
+                _receive(pkt, listener);
                 break;
                 
 
@@ -202,47 +191,57 @@ static void _coap_hdr_print(gnrc_coap_hdr4_t *hdr)
 static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer)
 {
     gnrc_coap_hdr4_t *hdr;
-    uint8_t coap_type, *data, hdrlen = 0;
+    uint8_t coap_ver, coap_type, *parse_ptr, *snip_end, optlen;
     uint16_t opt_delta = 0, optnum = 0;
     
-    /* TODO Reject if not a CoAP packet. May be intended for some other app .*/
+    /* Read fixed-length fields */
     hdr                = (gnrc_coap_hdr4_t *)snip->data;
+    coap_ver           = (hdr->ver_type_tkl & 0xC0) >> 6;
     coap_type          = (hdr->ver_type_tkl & 0x30) >> 4;
     msg_meta->tokenlen =  hdr->ver_type_tkl & 0x0F;
-    if (coap_type != GNRC_COAP_TYPE_NON)
+    if (coap_ver != GNRC_COAP_VERSION 
+            || coap_type != GNRC_COAP_TYPE_NON
+            || msg_meta->tokenlen > GNRC_COAP_MAX_TKLEN)
         return -EINVAL;
 
-    msg_meta->xfer_code = hdr->code;
+    msg_meta->xfer_code  = hdr->code;
+    /* TODO? Reference .u16 specifically? */
+    msg_meta->message_id = hdr->message_id;
+
+    /* Setup for parsing the rest of the message */
+    parse_ptr = (uint8_t *)snip->data + sizeof(gnrc_coap_hdr4_t);
+    snip_end  = (uint8_t *)snip->data + snip->size;
     
-    /* read/skip token and options */
-    hdrlen = sizeof(gnrc_coap_hdr4_t) + msg_meta->tokenlen;
-    data   = (uint8_t *)snip->data + hdrlen;
-    while (hdrlen < snip->size && opt_delta != GNRC_COAP_PAYLOAD_DELTA) {
-        opt_delta = (*data & 0xF0) >> 4;        /* assume not extended (13/14) */
+    /* Copy token */
+    if (msg_meta->tokenlen > 0)  {
+        memcpy(&msg_meta->token[0], parse_ptr, msg_meta->tokenlen);
+        parse_ptr += msg_meta->tokenlen;
+    }
+    
+    /* Read options */
+    while (parse_ptr < snip_end && *parse_ptr != GNRC_COAP_PAYLOAD_MARKER) {
+        opt_delta = (*parse_ptr & 0xF0) >> 4;        /* assume not extended (13/14) */
         optnum   += opt_delta;
-        if (opt_delta == GNRC_COAP_PAYLOAD_DELTA) {
-            hdrlen++;
-        } else {
-            hdrlen += (*data & 0xF) + 1;
-            if (optnum == GNRC_COAP_OPT_CONTENT_FORMAT) {
-                if (_parse_format_option(xfer, (uint8_t *)(data + 1), *data & 0xF) < 0)
-                    return -EINVAL;
-            }
+        optlen    = *parse_ptr & 0xF;
+        
+        if (optnum == GNRC_COAP_OPT_CONTENT_FORMAT) {
+            if (_parse_format_option(xfer, parse_ptr+1, optlen) < 0)
+                return -EINVAL;
         }
-        data = (uint8_t *)snip->data + hdrlen;
+        parse_ptr += optlen + 1;
     }
 
-    /* record data location */
-    if (snip->size > hdrlen) {
-        if (opt_delta == GNRC_COAP_PAYLOAD_DELTA) {
-            xfer->datalen = snip->size - hdrlen;
-            xfer->data    = data;
+    /* Record data location */
+    if (parse_ptr < snip_end) {
+        if (*parse_ptr == GNRC_COAP_PAYLOAD_MARKER) {
+            xfer->data    = ++parse_ptr;
+            xfer->datalen = snip_end - parse_ptr;
         } else {
-            return -EINVAL;  /* garbage beyond header; no payload indicated */
+            return -EINVAL;  /* no payload indicated */
         }
     } else {
-        xfer->datalen = 0;
         xfer->data    = NULL;
+        xfer->datalen = 0;
     }
     return 0;
 }
@@ -325,6 +324,25 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
         varflds[optlen] = GNRC_COAP_PAYLOAD_MARKER;
 
     return hdr;
+}
+
+static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener)
+{                
+    gnrc_coap_meta_t msg_meta;
+    gnrc_coap_transfer_t xfer;
+    int result;
+
+    /* parse the message and pass to the listener */
+    result =_coap_parse(pkt, &msg_meta, &xfer);
+    if (result < 0) {
+        DEBUG("coap: parse failure: %d\n", result);
+        gnrc_pktbuf_release(pkt);
+        return;
+    }
+    
+    if (listener->response_cbf)
+        listener->response_cbf(&msg_meta, &xfer);
+    gnrc_pktbuf_release(pkt);
 }
 
 kernel_pid_t gnrc_coap_init(void)

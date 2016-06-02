@@ -61,9 +61,6 @@ extern "C" {
 /** @brief Byte marker to separate header from payload */
 #define GNRC_COAP_PAYLOAD_MARKER (0xFF)
 
-/** @brief Identifies payload marker when parsing header options */
-#define GNRC_COAP_PAYLOAD_DELTA (0xF)
-
 /**
  *  @brief Message type enum -- confirmable, non-confirmable, etc.
  */
