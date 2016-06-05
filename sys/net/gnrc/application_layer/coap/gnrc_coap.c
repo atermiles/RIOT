@@ -19,6 +19,7 @@
  */
  
 #include <errno.h>
+#include "random.h"
 #include "utlist.h"
 #include "net/gnrc/coap.h"
 #include "gnrc_coap_internal.h"
@@ -32,6 +33,10 @@
 #else
 #define GNRC_COAP_STACK_SIZE (THREAD_STACKSIZE_DEFAULT)
 #endif
+
+/* Public variables */
+/* initialized in gnrc_coap_init() */
+gnrc_coap_module_t gnrc_coap_module;
 
 /* Internal variables and functions */
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
@@ -99,8 +104,9 @@ static void *_event_loop(void *arg)
  * @brief Calculates the length in bytes required to write all of the CoAP options,
  *        and optionally writes the options to the provided field.
  * 
- * @param[in] optsfld  Options field (in pktsnip header) to fill in; if NULL, only 
- *                     calculates required length; otherwise, field is updated
+ * @param[in] optsfld  Pointer to first options field (in pktsnip header) to fill 
+ *                     in; if NULL, only calculates required length; otherwise, 
+ *                     writes the options
  * @param[in] xfer     Resource transfer record containing option data
  * 
  * @return Count of bytes in options field
@@ -205,8 +211,7 @@ static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_co
         return -EINVAL;
 
     msg_meta->xfer_code  = hdr->code;
-    /* TODO? Reference .u16 specifically? */
-    msg_meta->message_id = hdr->message_id;
+    msg_meta->message_id = byteorder_ntohs(hdr->message_id);
 
     /* Setup for parsing the rest of the message */
     parse_ptr = (uint8_t *)snip->data + sizeof(gnrc_coap_hdr4_t);
@@ -294,10 +299,13 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     gnrc_pktsnip_t *hdr;
     size_t hdr_len;
     gnrc_coap_hdr4_t *hdr4;   /* 4 byte static portion of header */
-    uint8_t *varflds;
+    uint8_t *token_ptr, *opts_ptr;
     int optlen;
+    uint32_t rand;
     
-    /* Find options length so we can allocate the header snip. */
+    /* Find token and options lengths so we can allocate the header snip. */
+    if (msg_meta->tokenlen > GNRC_COAP_MAX_TKLEN)
+        return NULL;
     optlen = _do_options(NULL, xfer);
     if (optlen < 0) {
         DEBUG("coap: invalid option: %d\n", optlen);
@@ -305,23 +313,31 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     }
 
     /* allocate header */
-    hdr_len = sizeof(gnrc_coap_hdr4_t) + optlen + (payload == NULL ? 0 : 1);
+    hdr_len = sizeof(gnrc_coap_hdr4_t) + msg_meta->tokenlen + optlen 
+                                                            + (payload == NULL ? 0 : 1);
     hdr     = gnrc_pktbuf_add(payload, NULL, hdr_len, GNRC_NETTYPE_UNDEF);
     if (hdr == NULL)
         return NULL;
 
     /* write initial static fields */
     hdr4               = (gnrc_coap_hdr4_t *)hdr->data;
-    hdr4->ver_type_tkl = (GNRC_COAP_VERSION << 6) + (GNRC_COAP_TYPE_NON << 4) + 0;
+    hdr4->ver_type_tkl = (GNRC_COAP_VERSION << 6) + (GNRC_COAP_TYPE_NON << 4) 
+                                                  + msg_meta->tokenlen;
     hdr4->code         = msg_meta->xfer_code;
-    hdr4->message_id   = byteorder_htons(1);
+    hdr4->message_id   = byteorder_htons(++gnrc_coap_module.last_message_id);
     
-    /* write variable fields, starting with options */
-    varflds = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr4_t);
-    _do_options(varflds, xfer);
+    /* write variable fields, starting with token */
+    token_ptr = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr4_t);
+    opts_ptr  = token_ptr + msg_meta->tokenlen;
+
+    for (; token_ptr < opts_ptr; token_ptr += 4) {
+        rand = genrand_uint32();
+        memcpy(token_ptr, &rand, opts_ptr-token_ptr >= 4 ? 4 : opts_ptr-token_ptr);
+    }
+    _do_options(opts_ptr, xfer);
     
     if (payload != NULL)
-        varflds[optlen] = GNRC_COAP_PAYLOAD_MARKER;
+        *(opts_ptr+optlen) = GNRC_COAP_PAYLOAD_MARKER;
 
     return hdr;
 }
@@ -352,6 +368,8 @@ kernel_pid_t gnrc_coap_init(void)
 
     _pid = thread_create(_msg_stack, sizeof(_msg_stack), THREAD_PRIORITY_MAIN - 1,
                             THREAD_CREATE_STACKTEST, _event_loop, NULL, "coap");
+    // randomize initial value
+    gnrc_coap_module.last_message_id = genrand_uint32() & 0xFFFF;
 
     return _pid;
 }

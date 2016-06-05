@@ -153,6 +153,13 @@ typedef enum
 gnrc_coap_xfer_state_t;
 
 /**
+ * @brief   State for the gnrc coap module itself
+ */
+typedef struct {
+    uint16_t last_message_id;    /**< Last message ID used */
+} gnrc_coap_module_t;
+
+/**
  * @brief   Initial fixed fields in a CoAP message header (4 bytes)
  *
  * @details Header structure shown below. Includes only static fields through 
@@ -188,7 +195,7 @@ typedef struct __attribute__((packed)) {
 typedef struct {
     coap_msg_type_t msg_type;            /**< Type of message: confirmable, ack, etc */
     gnrc_coap_code_t xfer_code;          /**< Transfer code: GET, POST, etc, or response */
-    network_uint16_t message_id;         /**< Message ID */
+    uint16_t message_id;                 /**< Message ID */
     uint8_t token[GNRC_COAP_MAX_TKLEN];  /**< Conversation token */
     uint8_t tokenlen;                    /**< Length of token */
 } gnrc_coap_meta_t;

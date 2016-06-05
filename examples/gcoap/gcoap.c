@@ -28,7 +28,7 @@ static void handle_response(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xf
 
 static gnrc_coap_server_t server = { {{NULL, 0, KERNEL_PID_UNDEF}, NULL, NULL}, NULL, NULL };
 static gnrc_coap_sender_t sender = { .xfer_state = 0, 
-                                     .msg_meta   = {GNRC_COAP_TYPE_NON, 0, {0}, {0}, 0}, 
+                                     .msg_meta   = {GNRC_COAP_TYPE_NON, 0, 0, {0}, 0}, 
                                      .xfer       = NULL, 
                                      .listener   = {{NULL, 0, KERNEL_PID_UNDEF}, handle_response, NULL} };
 
@@ -104,39 +104,48 @@ int gcoap_cmd(int argc, char **argv)
     if (argc == 1)
         goto end;
 
-    /* client methods */
-    for (i = 0; i < sizeof(methods); i++) {
-        if (strcmp(argv[1], methods[i]) == 0) {
-            if (argc == 5 || argc == 6) {
-                sender.msg_meta.xfer_code = (gnrc_coap_code_t)(i+1);
-                xfer.path                 = argv[4];
-                xfer.pathlen              = strlen(argv[4]);
-                if (argc == 6) {
-                    xfer.data        = (uint8_t *)argv[5];
-                    xfer.datalen     = strlen(argv[5]);
-                    xfer.data_format = GNRC_COAP_FORMAT_TEXT;
+    if (strcmp(argv[1], "c") == 0) {
+        for (i = 0; i < sizeof(methods); i++) {
+            if (strcmp(argv[2], methods[i]) == 0) {
+                if (argc == 6 || argc == 7) {
+                    sender.msg_meta.xfer_code = (gnrc_coap_code_t)(i+1);
+                    xfer.path                 = argv[5];
+                    xfer.pathlen              = strlen(argv[5]);
+                    if (argc == 7) {
+                        xfer.data        = (uint8_t *)argv[6];
+                        xfer.datalen     = strlen(argv[6]);
+                        xfer.data_format = GNRC_COAP_FORMAT_TEXT;
+                    }
+                    send(argv[3], argv[4], &xfer);
+                    return 0;
+                } else {
+                    printf("usage: %s c <get|put|post> <addr> <port> <path> [data]\n", argv[0]);
+                    return 1;
                 }
-                send(argv[2], argv[3], &xfer);
-                return 0;
-            } else {
-                printf("usage: %s <get|put|post> <addr> <port> <path> [data]\n", argv[0]);
-                return 1;
             }
         }
-    }
 
-    if (strcmp(argv[1], "server") == 0) {
+    } else if (strcmp(argv[1], "s") == 0) {
         if (argc == 3) {
             start_server(argv[2]);
             return 0;
         } else {
-            printf("usage: %s server <port>\n", argv[0]);
+            printf("usage: %s s <port>\n", argv[0]);
+            return 1;
+        }
+
+    } else if (strcmp(argv[1], "t") == 0) {
+        if (argc == 3 && atoi(argv[2]) <= 8) {
+            sender.msg_meta.tokenlen = (uint8_t)atoi(argv[2]);
+            return 0;
+        } else {
+            printf("usage: %s t <length>; default 0, to 8\n", argv[0]);
             return 1;
         }
     }
     
     end:
     /* handles goto and fall through */
-    printf("usage: %s <get|put|post|server>\n", argv[0]);
+    printf("usage: %s <(c)lient|(t)okenlen|(s)erver>\n", argv[0]);
     return 1;
 }
