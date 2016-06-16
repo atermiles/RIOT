@@ -141,6 +141,26 @@ typedef enum
 gnrc_coap_media_type_t;
 
 /**
+ *  @brief Enum for the source of options information in a transfer struct
+ */
+typedef enum
+{
+    GNRC_COAP_PATHSOURCE_STRING = 0,
+    GNRC_COAP_PATHSOURCE_OPTIONS = 1
+}
+gnrc_coap_path_source_t;
+
+/**
+ *  @brief Enum for mode of listening for incoming messages
+ */
+typedef enum
+{
+    GNRC_COAP_LISTEN_REQUEST,      /**< Listening for requests (server) */
+    GNRC_COAP_LISTEN_RESPONSE      /**< Listening for responses (client) */
+}
+gnrc_coap_listen_mode_t;
+
+/**
  *  @brief Enum for state of resource transfer via exchange of messages
  */
 typedef enum
@@ -201,11 +221,14 @@ typedef struct {
 } gnrc_coap_meta_t;
 
 /**
- * @brief   Resource representation for transfer to/from some host
+ * @brief   Transfer of a resource to/from some host; separate from the resource
+ *          itself
  * 
  * Useful for sending to a client, or as received from a server.
  */
 typedef struct {
+    gnrc_coap_path_source_t path_source; /**< Source of path data: string or options data; if
+                                              options, path attribute points to the first option */
     char *path;                          /**< Path to resource */
     size_t pathlen;                      /**< Length of path, to make it safer to read path */
     uint8_t *data;                       /**< Data for resource representation */
@@ -222,8 +245,8 @@ typedef struct {
  */
 typedef struct coap_listener {
     gnrc_netreg_entry_t netreg;          /**< Network registration for port */
-    void (*response_cbf)(gnrc_coap_meta_t*, gnrc_coap_transfer_t*);    
-                                         /**< Response callback */
+    gnrc_coap_listen_mode_t mode;        /**< Mode of listening -- request, response, etc. */
+    void *handler;                       /**< Handler appropriate for the listen mode */
     struct coap_listener *next;          /**< Next member in list; allows for registrar */
 } gnrc_coap_listener_t;
 
@@ -233,20 +256,22 @@ typedef struct coap_listener {
  * A sender may be a client sending a request, or a server sending a confirmable
  * response.
  */
-typedef struct {
+typedef struct coap_sender {
     gnrc_coap_xfer_state_t xfer_state;   /**< State of messaging to complete the transfer */
-    gnrc_coap_meta_t msg_meta;           /**< Message metadata for header */
-    gnrc_coap_transfer_t *xfer;          /**< Transfer details (optional, for retries) */
-    gnrc_coap_listener_t listener;       /**< Listens for a response from the receiver */
+    gnrc_coap_meta_t msg_meta;           /**< Request metadata for header */
+    gnrc_coap_transfer_t *xfer;          /**< Request transfer details (optional, for retries) */
+    gnrc_coap_listener_t listener;       /**< Listens for a response from the server */
+    void (*response_cbf)(struct coap_sender*, gnrc_coap_meta_t*, gnrc_coap_transfer_t*);    
+                                         /**< Callback for server response */
 } gnrc_coap_sender_t;
 
 /**
  * @brief   Setup for listening for requests as a CoAP server.
  */
-typedef struct {
+typedef struct coap_server {
     gnrc_coap_listener_t listener;       /**< Listens for client requests */
-    void (*get_cbf)(void);               /**< GET request callback */
-    void (*set_cbf)(void);               /**< PUT/POST request callback */
+    void (*request_cbf)(struct coap_server*, gnrc_coap_meta_t*, gnrc_coap_transfer_t*);
+                                         /**< Request callback */
 } gnrc_coap_server_t;
 
 
@@ -310,6 +335,32 @@ inline bool gnrc_coap_is_class(gnrc_coap_code_t code, gnrc_coap_code_t class)
 {
     return code >= class && code <= (class + 0xF);
 }
+
+/**
+ * @brief Provides a URI path segment from a Uri-Path option in a CoAP header
+ * 
+ * @param[in] xfer Resource transfer with pointer to first option header
+ * @param[in] seg_index Index of the desired segmented
+ * @param[out] path_seg Pointer to the segment if found; otherwise NULL
+ * 
+ * @return Length of requested segment, or 0 if not found
+ */
+uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char *path_seg);
+
+/**
+ * @brief strcmp against the path for a resource transfer
+ * 
+ * This function allows comparison of an option-based path, which may span multiple
+ * options, like a single string. This way we need not allocate memory to
+ * temporarily assemble the string.
+ * 
+ * @param[in] xfer Transfer for path
+ * @param[in] path String for comparison
+ * 
+ * @return 0 if strings are equal; otherwise same sign as the first differing
+ *         characters
+ */
+int gnrc_coap_pathcmp(gnrc_coap_transfer_t *xfer, char *path);
 
 /**
  * @brief   Initializes the gnrc_coap thread and device.

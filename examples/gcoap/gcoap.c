@@ -24,17 +24,47 @@
 #include "net/gnrc/coap.h"
 #include "od.h"
 
-static void handle_response(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer);
+static void handle_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_meta, 
+                                                        gnrc_coap_transfer_t *xfer);
+static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
+                                                        gnrc_coap_transfer_t *xfer);
 
-static gnrc_coap_server_t server = { {{NULL, 0, KERNEL_PID_UNDEF}, NULL, NULL}, NULL, NULL };
-static gnrc_coap_sender_t sender = { .xfer_state = 0, 
-                                     .msg_meta   = {GNRC_COAP_TYPE_NON, 0, 0, {0}, 0}, 
-                                     .xfer       = NULL, 
-                                     .listener   = {{NULL, 0, KERNEL_PID_UNDEF}, handle_response, NULL} };
+static gnrc_coap_server_t server = { .listener     = {{NULL, 0, KERNEL_PID_UNDEF}, 
+                                                      GNRC_COAP_LISTEN_REQUEST, &server, NULL}, 
+                                     .request_cbf  = handle_request };
+static gnrc_coap_sender_t sender = { .xfer_state   = 0, 
+                                     .msg_meta     = {GNRC_COAP_TYPE_NON, 0, 0, {0}, 0}, 
+                                     .xfer         = NULL, 
+                                     .listener     = {{NULL, 0, KERNEL_PID_UNDEF}, 
+                                                      GNRC_COAP_LISTEN_RESPONSE, &sender, NULL},
+                                     .response_cbf = handle_response};
 
-static void handle_response(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer)
+static void handle_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_meta, 
+                                                       gnrc_coap_transfer_t *xfer)
 {
-    char *class_str = (msg_meta->xfer_code & GNRC_COAP_CLASS_SUCCESS) ? "success" : "error";
+    char *path_seg = NULL;
+    uint8_t seglen, i = 0;
+    
+    if (msg_meta->xfer_code == GNRC_COAP_CODE_GET) {
+        /* create empty response -- no resources */
+        printf("gcoap: request for ");
+        do {
+            seglen = gnrc_coap_get_pathseg(xfer, i, path_seg);
+            if (seglen > 0) {
+                printf("/%.*s", seglen, path_seg);
+                i++;
+            } else {
+                printf("%s\n", i==0 ? "/" : "");
+            }
+        } while (seglen > 0);
+    }
+}
+
+static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
+                                                        gnrc_coap_transfer_t *xfer)
+{
+    char *class_str = (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_SUCCESS)) 
+                            ? "success" : "error";
     printf("gcoap: %s, code %1u.%02u", class_str, 
                                                    (msg_meta->xfer_code & 0xE0) >> 5,
                                                     msg_meta->xfer_code & 0x1F);
@@ -99,7 +129,7 @@ int gcoap_cmd(int argc, char **argv)
     /* Ordered as in the gnrc_coap_code_t enum, for easier processing */
     char *methods[] = {"get", "post", "put"}; 
     size_t i;
-    gnrc_coap_transfer_t xfer = {NULL, 0, NULL, 0, 0};
+    gnrc_coap_transfer_t xfer = {0, NULL, 0, NULL, 0, 0};
     
     if (argc == 1)
         goto end;
@@ -109,6 +139,7 @@ int gcoap_cmd(int argc, char **argv)
             if (strcmp(argv[2], methods[i]) == 0) {
                 if (argc == 6 || argc == 7) {
                     sender.msg_meta.xfer_code = (gnrc_coap_code_t)(i+1);
+                    xfer.path_source          = GNRC_COAP_PATHSOURCE_STRING;
                     xfer.path                 = argv[5];
                     xfer.pathlen              = strlen(argv[5]);
                     if (argc == 7) {

@@ -24,7 +24,7 @@
 #include "net/gnrc/coap.h"
 #include "gnrc_coap_internal.h"
 
-#define ENABLE_DEBUG (0)
+#define ENABLE_DEBUG (1)
 #include "debug.h"
 
 /** @brief Stack size for module thread */
@@ -37,6 +37,7 @@
 /* Public variables */
 /* initialized in gnrc_coap_init() */
 gnrc_coap_module_t gnrc_coap_module;
+static char GNRC_COAP_PATHSEP = '/';
 
 /* Internal variables and functions */
 static kernel_pid_t _pid = KERNEL_PID_UNDEF;
@@ -48,6 +49,10 @@ static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer);
 static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval, 
                                                             uint8_t optlen);
 static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener);
+static void _receive_request(gnrc_coap_server_t *sender, gnrc_coap_meta_t *msg_meta, 
+                                                          gnrc_coap_transfer_t *xfer);
+static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta,
+                                                          gnrc_coap_transfer_t *xfer);
 /* static void _coap_hdr_print(gnrc_coap_hdr4_t *hdr); */
 
 /**
@@ -110,17 +115,19 @@ static void *_event_loop(void *arg)
  * @param[in] xfer     Resource transfer record containing option data
  * 
  * @return Count of bytes in options field
- * @return -EINVAL if path does not begin with '/'
+ * @return -EINVAL if path is not sourced from a string
  */
 static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer)
 {
-    size_t optslen      = 0;
+    size_t optslen      = 0;        /* length of all options */
     uint8_t last_optnum = 0;
 
     /* Uri-Path: write each segment*/
-    if ((xfer->path != NULL && xfer->pathlen > 0)
-            || (xfer->pathlen == 1 && xfer->path[0] != '/')) {
-        size_t seg_pos;         /* position of current segment in full path */
+    if (xfer->path_source != GNRC_COAP_PATHSOURCE_STRING)
+        return -EINVAL;
+        
+    if (xfer->path != NULL && xfer->pathlen > 0) {
+        size_t seg_pos = 0;         /* position of current segment in full path */
         if (xfer->path[0] != '/')
             return -EINVAL;     /* must be an absolute path */
         else
@@ -232,6 +239,11 @@ static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_co
         if (optnum == GNRC_COAP_OPT_CONTENT_FORMAT) {
             if (_parse_format_option(xfer, parse_ptr+1, optlen) < 0)
                 return -EINVAL;
+        } else if (optnum == GNRC_COAP_OPT_URI_PATH && opt_delta != 0) {
+            /* first path option */
+            xfer->path_source = GNRC_COAP_PATHSOURCE_OPTIONS;
+            xfer->path        = (char *)parse_ptr + 1;
+            xfer->pathlen     = optlen;
         }
         parse_ptr += optlen + 1;
     }
@@ -279,6 +291,64 @@ static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval,
             break;
     }
     return result;
+}
+
+static void _receive_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_meta, 
+                                                         gnrc_coap_transfer_t *xfer)
+{
+    /* Validate request */
+    if (!gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_REQUEST)) {
+        DEBUG("coap: request failure\n");
+        return;
+    }
+
+    /* Pass request to handler */
+    if (server->request_cbf != NULL)
+        server->request_cbf(server, msg_meta, xfer);
+}
+
+static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
+                                                          gnrc_coap_transfer_t *xfer)
+{
+    /* Validate token */
+    if (msg_meta->tokenlen != sender->msg_meta.tokenlen) {
+        DEBUG("coap: response failure\n");
+        return;
+    }
+
+    for (uint8_t i = 0; i < msg_meta->tokenlen; i++) {
+        if (msg_meta->token[i] != sender->msg_meta.token[i]) {
+            DEBUG("coap: response failure\n");
+            return;
+        }
+    }
+
+    /* Pass response to handler */
+    if (sender->response_cbf != NULL)
+        sender->response_cbf(sender, msg_meta, xfer);
+}
+
+static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener)
+{                
+    gnrc_coap_meta_t msg_meta;
+    gnrc_coap_transfer_t xfer;
+    int result;
+    
+    /* Fill in the metadata and transfer data */
+    result =_coap_parse(pkt, &msg_meta, &xfer);
+    if (result < 0) {
+        DEBUG("coap: parse failure: %d\n", result);
+        gnrc_pktbuf_release(pkt);
+        return;
+    }
+    
+    if (listener->mode == GNRC_COAP_LISTEN_RESPONSE)
+        _receive_response((gnrc_coap_sender_t *)listener->handler, &msg_meta, &xfer);
+
+    else if (listener->mode == GNRC_COAP_LISTEN_REQUEST)
+        _receive_request((gnrc_coap_server_t *)listener->handler, &msg_meta, &xfer);
+    
+    gnrc_pktbuf_release(pkt);
 }
 
 /* 
@@ -342,23 +412,75 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     return hdr;
 }
 
-static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener)
-{                
-    gnrc_coap_meta_t msg_meta;
-    gnrc_coap_transfer_t xfer;
-    int result;
+uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char *path_seg)
+{
+    uint8_t i, opt_delta = 0, seglen = 0;
+    uint8_t *xferpath = (uint8_t *)xfer->path;
+    
+    if (xfer->path_source != GNRC_COAP_PATHSOURCE_OPTIONS) {
+        return 0;
+    }
 
-    /* parse the message and pass to the listener */
-    result =_coap_parse(pkt, &msg_meta, &xfer);
-    if (result < 0) {
-        DEBUG("coap: parse failure: %d\n", result);
-        gnrc_pktbuf_release(pkt);
-        return;
+    if (xferpath != NULL) {               /* initialize segment length and pointer */
+        seglen = *xferpath & 0xF;
+        xferpath++;
     }
     
-    if (listener->response_cbf)
-        listener->response_cbf(&msg_meta, &xfer);
-    gnrc_pktbuf_release(pkt);
+    for (i = 0; i < seg_index && opt_delta == 0; i++) {
+        xferpath += seglen;                     /* find next segment */
+        opt_delta = (*xferpath & 0xF0) >> 4;
+        if (opt_delta == 0) {
+            seglen = *xferpath & 0xF;
+            xferpath++;
+        } else {                                /* no more segments */
+            seglen   = 0;
+            xferpath = NULL;
+        }
+    }
+    path_seg = (char *)xferpath;
+    return seglen;
+}
+
+int gnrc_coap_pathcmp(gnrc_coap_transfer_t *xfer, char *path) 
+{
+    char *xfer_seg = NULL;
+    uint8_t seglen = 0, seg_index = 0, i = 0;
+    uint8_t xferlen = 0;                    /* accumulated length of xfer_segs */
+    size_t pathlen;
+    
+    if (xfer->path_source == GNRC_COAP_PATHSOURCE_OPTIONS) {
+
+        pathlen = strlen(path);
+        while (seglen > 0 || seg_index == 0) {
+            if (seg_index % 2 == 0) {               /* inject '/' between xfer_segs */
+                xfer_seg = &GNRC_COAP_PATHSEP;
+                seglen   = 1;
+                xferlen += seglen;                                   
+            } else {                                /* retrieve xfer_seg */
+                seglen   = gnrc_coap_get_pathseg(xfer, (seg_index-1) / 2, xfer_seg);
+                if (seglen == 0)
+                    break;
+                xferlen += seglen;
+            }
+
+            for (; i < xferlen && i < pathlen; i++) {
+                if (*xfer_seg == *path) {           /* compare char by char */
+                    xfer_seg++;
+                    path++;
+                } else {
+                    return *xfer_seg - *path;
+                }
+            }
+            seg_index++;
+        }
+        return (xferlen < pathlen) ? -1 : 0;
+ 
+    } else if (xfer->path_source == GNRC_COAP_PATHSOURCE_STRING) {
+        return strcmp(xfer->path, path);
+    } else {
+        DEBUG("coap: unknown path source: %d\n", xfer->path_source);
+        return 0;
+    }
 }
 
 kernel_pid_t gnrc_coap_init(void)
