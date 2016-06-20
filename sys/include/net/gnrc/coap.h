@@ -270,7 +270,7 @@ typedef struct coap_sender {
  */
 typedef struct coap_server {
     gnrc_coap_listener_t listener;       /**< Listens for client requests */
-    void (*request_cbf)(struct coap_server*, gnrc_coap_meta_t*, gnrc_coap_transfer_t*);
+    void (*request_cbf)(gnrc_coap_meta_t*, gnrc_coap_transfer_t*, ipv6_addr_t*, uint16_t);
                                          /**< Request callback */
 } gnrc_coap_server_t;
 
@@ -304,24 +304,29 @@ size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t po
                                                   gnrc_coap_transfer_t *xfer);
 
 /**
- * @brief   Registers a listener for responses on an ephemeral port.
+ * @brief   Registers a listener for responses on a port.
  * 
  * @param[inout] listener  Listener parameters; updates gnrc_coap pid and port
+ * @param[in] port         Port on which to listen, or 0 to assign an ephemeral
+ *                         port
  * 
  * @return 0 on success
  * @return -EALREADY if listener already is registered
  */                                                             
-int gnrc_coap_register_listener(gnrc_coap_listener_t *listener);
+int gnrc_coap_register_listener(gnrc_coap_listener_t *listener, uint16_t port);
 
 /**
  * @brief   Starts a server for listening for CoAP messages on a port.
  * 
  * @param[inout] server  Server parameters; protocol registration is updated when
  *                       started
+ * @param[in] port       Listening port
+
  * @return 0 on success
- * @return -EINVAL if a server already is listening, or port number not valid
+ * @return -EALREADY if a server already is listening
+ * @return -EINVAL if port number not valid
  */                                                             
-int gnrc_coap_start_server(gnrc_coap_server_t *server);
+int gnrc_coap_start_server(gnrc_coap_server_t *server, uint16_t port);
 
 /**
  * @brief  Verifies a method/response code as a member of a class of these codes.
@@ -339,13 +344,16 @@ inline bool gnrc_coap_is_class(gnrc_coap_code_t code, gnrc_coap_code_t class)
 /**
  * @brief Provides a URI path segment from a Uri-Path option in a CoAP header
  * 
+ * A client may read the full path by incrementing the segment undex until the 
+ * returned length is zero.
+ * 
  * @param[in] xfer Resource transfer with pointer to first option header
- * @param[in] seg_index Index of the desired segmented
+ * @param[in] seg_index Index of the desired segment
  * @param[out] path_seg Pointer to the segment if found; otherwise NULL
  * 
  * @return Length of requested segment, or 0 if not found
  */
-uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char *path_seg);
+uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char **path_seg);
 
 /**
  * @brief strcmp against the path for a resource transfer

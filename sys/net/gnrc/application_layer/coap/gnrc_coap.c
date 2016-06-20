@@ -24,7 +24,7 @@
 #include "net/gnrc/coap.h"
 #include "gnrc_coap_internal.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 /** @brief Stack size for module thread */
@@ -48,9 +48,11 @@ static void *_event_loop(void *arg);
 static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer);
 static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval, 
                                                             uint8_t optlen);
-static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener);
+static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener, ipv6_addr_t *src,
+                                                                          uint16_t port);
 static void _receive_request(gnrc_coap_server_t *sender, gnrc_coap_meta_t *msg_meta, 
-                                                          gnrc_coap_transfer_t *xfer);
+                                                          gnrc_coap_transfer_t *xfer,
+                                                          ipv6_addr_t *src, uint16_t port);
 static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta,
                                                           gnrc_coap_transfer_t *xfer);
 /* static void _coap_hdr_print(gnrc_coap_hdr4_t *hdr); */
@@ -61,7 +63,8 @@ static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_
 static void *_event_loop(void *arg)
 {
     msg_t msg_rcvd, msg_queue[GNRC_COAP_MSG_QUEUE_SIZE];
-    gnrc_pktsnip_t *pkt, *udp_snip;
+    gnrc_pktsnip_t *pkt, *udp_snip, *ipv6_snip;
+    ipv6_addr_t *src_addr;
     uint16_t port;
     gnrc_coap_listener_t *listener;
 
@@ -80,7 +83,7 @@ static void *_event_loop(void *arg)
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
-                udp_snip  = pkt->next;
+                udp_snip = pkt->next;
                 if (udp_snip->type != GNRC_NETTYPE_UDP) {
                     gnrc_pktbuf_release(pkt);
                     break;
@@ -92,9 +95,16 @@ static void *_event_loop(void *arg)
                     gnrc_pktbuf_release(pkt);
                     break;
                 }
+
+                /* read source port and address */
+                port = byteorder_ntohs(((udp_hdr_t *)udp_snip->data)->src_port);
+
+                LL_SEARCH_SCALAR(udp_snip, ipv6_snip, type, GNRC_NETTYPE_IPV6);
+                assert(ipv6_snip != NULL);
+                src_addr = &((ipv6_hdr_t *)ipv6_snip->data)->src;
                 
                 /* _coap_hdr_print((gnrc_coap_hdr4_t *)pkt->data); */
-                _receive(pkt, listener);
+                _receive(pkt, listener, src_addr, port);
                 break;
                 
 
@@ -123,11 +133,12 @@ static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer)
     uint8_t last_optnum = 0;
 
     /* Uri-Path: write each segment*/
-    if (xfer->path_source != GNRC_COAP_PATHSOURCE_STRING)
-        return -EINVAL;
-        
     if (xfer->path != NULL && xfer->pathlen > 0) {
         size_t seg_pos = 0;         /* position of current segment in full path */
+
+        if (xfer->path_source != GNRC_COAP_PATHSOURCE_STRING)
+            return -EINVAL;
+
         if (xfer->path[0] != '/')
             return -EINVAL;     /* must be an absolute path */
         else
@@ -294,7 +305,8 @@ static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval,
 }
 
 static void _receive_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_meta, 
-                                                         gnrc_coap_transfer_t *xfer)
+                                                         gnrc_coap_transfer_t *xfer,
+                                                         ipv6_addr_t *src, uint16_t port)
 {
     /* Validate request */
     if (!gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_REQUEST)) {
@@ -304,7 +316,7 @@ static void _receive_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_m
 
     /* Pass request to handler */
     if (server->request_cbf != NULL)
-        server->request_cbf(server, msg_meta, xfer);
+        server->request_cbf(msg_meta, xfer, src, port);
 }
 
 static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
@@ -328,7 +340,8 @@ static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_
         sender->response_cbf(sender, msg_meta, xfer);
 }
 
-static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener)
+static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener, ipv6_addr_t *src,
+                                                                          uint16_t port)
 {                
     gnrc_coap_meta_t msg_meta;
     gnrc_coap_transfer_t xfer;
@@ -346,7 +359,7 @@ static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener)
         _receive_response((gnrc_coap_sender_t *)listener->handler, &msg_meta, &xfer);
 
     else if (listener->mode == GNRC_COAP_LISTEN_REQUEST)
-        _receive_request((gnrc_coap_server_t *)listener->handler, &msg_meta, &xfer);
+        _receive_request((gnrc_coap_server_t *)listener->handler, &msg_meta, &xfer, src, port);
     
     gnrc_pktbuf_release(pkt);
 }
@@ -391,7 +404,7 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
 
     /* write initial static fields */
     hdr4               = (gnrc_coap_hdr4_t *)hdr->data;
-    hdr4->ver_type_tkl = (GNRC_COAP_VERSION << 6) + (GNRC_COAP_TYPE_NON << 4) 
+    hdr4->ver_type_tkl = (GNRC_COAP_VERSION << 6) + (msg_meta->msg_type << 4) 
                                                   + msg_meta->tokenlen;
     hdr4->code         = msg_meta->xfer_code;
     hdr4->message_id   = byteorder_htons(++gnrc_coap_module.last_message_id);
@@ -400,9 +413,12 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     token_ptr = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr4_t);
     opts_ptr  = token_ptr + msg_meta->tokenlen;
 
-    for (; token_ptr < opts_ptr; token_ptr += 4) {
-        rand = genrand_uint32();
-        memcpy(token_ptr, &rand, opts_ptr-token_ptr >= 4 ? 4 : opts_ptr-token_ptr);
+    /* only generate token for request; assume already copied for response */
+    if (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_REQUEST)) {
+        for (; token_ptr < opts_ptr; token_ptr += 4) {
+            rand = genrand_uint32();
+            memcpy(token_ptr, &rand, opts_ptr-token_ptr >= 4 ? 4 : opts_ptr-token_ptr);
+        }
     }
     _do_options(opts_ptr, xfer);
     
@@ -412,32 +428,38 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     return hdr;
 }
 
-uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char *path_seg)
+uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char **path_seg)
 {
-    uint8_t i, opt_delta = 0, seglen = 0;
+    uint8_t seglen, i = 0, opt_delta = 0;
     uint8_t *xferpath = (uint8_t *)xfer->path;
+    /* xferpath as char*; must be lvalue for path_seg */
+    char *pathstr = NULL;
     
     if (xfer->path_source != GNRC_COAP_PATHSOURCE_OPTIONS) {
         return 0;
     }
 
-    if (xferpath != NULL) {               /* initialize segment length and pointer */
-        seglen = *xferpath & 0xF;
-        xferpath++;
+    if (xferpath != NULL) {
+        seglen = xfer->pathlen;
+        DEBUG("coap: found seg %u; seglen: %u\n", i, seglen);
+    } else {
+        return 0;
     }
     
-    for (i = 0; i < seg_index && opt_delta == 0; i++) {
+    for (; i < seg_index && opt_delta == 0; i++) {
         xferpath += seglen;                     /* find next segment */
         opt_delta = (*xferpath & 0xF0) >> 4;
         if (opt_delta == 0) {
             seglen = *xferpath & 0xF;
             xferpath++;
+            DEBUG("coap: found seg %u; seglen: %u\n", i+1, seglen);
         } else {                                /* no more segments */
             seglen   = 0;
             xferpath = NULL;
         }
     }
-    path_seg = (char *)xferpath;
+    pathstr   = (char *)xferpath;           /* init lvalue */
+    *path_seg = pathstr;
     return seglen;
 }
 
@@ -457,7 +479,7 @@ int gnrc_coap_pathcmp(gnrc_coap_transfer_t *xfer, char *path)
                 seglen   = 1;
                 xferlen += seglen;                                   
             } else {                                /* retrieve xfer_seg */
-                seglen   = gnrc_coap_get_pathseg(xfer, (seg_index-1) / 2, xfer_seg);
+                seglen   = gnrc_coap_get_pathseg(xfer, (seg_index-1) / 2, &xfer_seg);
                 if (seglen == 0)
                     break;
                 xferlen += seglen;

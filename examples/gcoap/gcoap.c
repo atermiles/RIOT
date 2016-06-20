@@ -24,8 +24,8 @@
 #include "net/gnrc/coap.h"
 #include "od.h"
 
-static void handle_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_meta, 
-                                                        gnrc_coap_transfer_t *xfer);
+static void handle_request(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer,
+                                                       ipv6_addr_t *src, uint16_t port);
 static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
                                                         gnrc_coap_transfer_t *xfer);
 
@@ -39,24 +39,41 @@ static gnrc_coap_sender_t sender = { .xfer_state   = 0,
                                                       GNRC_COAP_LISTEN_RESPONSE, &sender, NULL},
                                      .response_cbf = handle_response};
 
-static void handle_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_meta, 
-                                                       gnrc_coap_transfer_t *xfer)
+static void handle_request(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer,
+                                                       ipv6_addr_t *src, uint16_t port)
 {
     char *path_seg = NULL;
     uint8_t seglen, i = 0;
+    gnrc_coap_transfer_t rsp_xfer = {0, NULL, 0, NULL, 0, 0};
+    size_t bytes_sent;
     
-    if (msg_meta->xfer_code == GNRC_COAP_CODE_GET) {
+    printf("gcoap: request for path...\n");
+    do {
+        seglen = gnrc_coap_get_pathseg(xfer, i, &path_seg);
+        if (seglen > 0) {
+            printf("[%u] /%.*s\n", i, seglen, path_seg);
+            i++;
+        } else if (i == 0) {
+            printf("/\n");
+        }
+    } while (seglen > 0);
+
+    if (msg_meta->xfer_code == GNRC_COAP_CODE_GET
+            && gnrc_coap_pathcmp(xfer, "/.well-known/core") == 0) {
+
         /* create empty response -- no resources */
-        printf("gcoap: request for ");
-        do {
-            seglen = gnrc_coap_get_pathseg(xfer, i, path_seg);
-            if (seglen > 0) {
-                printf("/%.*s", seglen, path_seg);
-                i++;
-            } else {
-                printf("%s\n", i==0 ? "/" : "");
-            }
-        } while (seglen > 0);
+        sender.msg_meta.msg_type  = GNRC_COAP_TYPE_NON;
+        sender.msg_meta.xfer_code = GNRC_COAP_CODE_CONTENT;
+        sender.msg_meta.tokenlen  = msg_meta->tokenlen;
+        memcpy(&sender.msg_meta.token[0], &msg_meta->token[0], msg_meta->tokenlen);
+
+        bytes_sent = gnrc_coap_send(&sender, src, port, &rsp_xfer);
+        if (bytes_sent > 0)
+            printf("gcoap: msg sent, %u bytes\n", bytes_sent);
+        else
+            puts("gcoap: msg send failed");
+    } else {
+        /* send not-found response */
     }
 }
 
@@ -64,8 +81,8 @@ static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_me
                                                         gnrc_coap_transfer_t *xfer)
 {
     char *class_str = (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_SUCCESS)) 
-                            ? "success" : "error";
-    printf("gcoap: %s, code %1u.%02u", class_str, 
+                            ? "Success" : "Error";
+    printf("gcoap: response %s, code %1u.%02u", class_str, 
                                                    (msg_meta->xfer_code & 0xE0) >> 5,
                                                     msg_meta->xfer_code & 0x1F);
     if (xfer->datalen > 0) {
@@ -78,7 +95,7 @@ static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_me
             od_hex_dump(xfer->data, xfer->datalen, OD_WIDTH_DEFAULT);
         }
     } else {
-        printf("\n");
+        printf("empty payload\n");
     }
 }
 
@@ -118,10 +135,11 @@ static void start_server(char *port_str)
         puts("Error: invalid port specified");
         return;
     }
-    /* start server */
-    server.listener.netreg.demux_ctx = (uint32_t)port;
-    gnrc_coap_start_server(&server);
-    printf("gcoap: started CoAP server on port %" PRIu16 "\n", port);
+
+    if (gnrc_coap_start_server(&server, port) == 0)
+        printf("gcoap: started CoAP server on port %" PRIu16 "\n", port);
+    else
+        printf("gcoap: failed to start CoAP server on port %" PRIu16 "\n", port);
 }
 
 int gcoap_cmd(int argc, char **argv)

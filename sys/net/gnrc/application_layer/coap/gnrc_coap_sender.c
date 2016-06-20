@@ -53,7 +53,8 @@ size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t po
     size_t pktlen;
     
     /* register listener if necessary */
-    gnrc_coap_register_listener(&sender->listener);
+    if (gnrc_coap_is_class(sender->msg_meta.xfer_code, GNRC_COAP_CLASS_REQUEST))
+        gnrc_coap_register_listener(&sender->listener, 0);
 
     /* allocate payload */
     if (xfer->datalen > 0) {
@@ -105,7 +106,7 @@ size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t po
     return pktlen;
 }
 
-int gnrc_coap_register_listener(gnrc_coap_listener_t *listener)
+int gnrc_coap_register_listener(gnrc_coap_listener_t *listener, uint16_t port)
 {
     if (listener->netreg.pid == gnrc_coap_pid_get()) {
         DEBUG("coap: listener already registered for port %" PRIu32 "\n",
@@ -116,7 +117,10 @@ int gnrc_coap_register_listener(gnrc_coap_listener_t *listener)
     /* TODO Handle reduced port range for UDP compression; and in that context, */
     /*      handle when no ports available */
     /* Find an unused ephemeral port and add to listener list */
-    listener->netreg.demux_ctx = GNRC_COAP_EPHEMERAL_PORT_MIN;
+    if (port == 0)
+        listener->netreg.demux_ctx = GNRC_COAP_EPHEMERAL_PORT_MIN;
+    else
+        listener->netreg.demux_ctx = port;
     
     while (listener->netreg.pid != gnrc_coap_pid_get()) {
         gnrc_netreg_entry_t *lookup;
@@ -128,8 +132,10 @@ int gnrc_coap_register_listener(gnrc_coap_listener_t *listener)
             DEBUG("coap: registered listener to port %" PRIu32 "\n",
                    listener->netreg.demux_ctx);
         } else {
-            /* Try next port number */
-            listener->netreg.demux_ctx++;
+            if (port == 0)
+                return -EINVAL;
+            else
+                listener->netreg.demux_ctx++;       /* try next port number */
         }
     }
     return 0;
