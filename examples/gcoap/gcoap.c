@@ -60,21 +60,20 @@ static void handle_request(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfe
 
     if (msg_meta->xfer_code == GNRC_COAP_CODE_GET
             && gnrc_coap_pathcmp(xfer, "/.well-known/core") == 0) {
-
         /* create empty response -- no resources */
-        sender.msg_meta.msg_type  = GNRC_COAP_TYPE_NON;
         sender.msg_meta.xfer_code = GNRC_COAP_CODE_CONTENT;
-        sender.msg_meta.tokenlen  = msg_meta->tokenlen;
-        memcpy(&sender.msg_meta.token[0], &msg_meta->token[0], msg_meta->tokenlen);
-
-        bytes_sent = gnrc_coap_send(&sender, src, port, &rsp_xfer);
-        if (bytes_sent > 0)
-            printf("gcoap: msg sent, %u bytes\n", bytes_sent);
-        else
-            puts("gcoap: msg send failed");
     } else {
-        /* send not-found response */
+        sender.msg_meta.xfer_code = GNRC_COAP_CODE_NOT_FOUND;
     }
+    sender.msg_meta.msg_type  = GNRC_COAP_TYPE_NON;
+    sender.msg_meta.tokenlen  = msg_meta->tokenlen;
+    memcpy(&sender.msg_meta.token[0], &msg_meta->token[0], msg_meta->tokenlen);
+
+    bytes_sent = gnrc_coap_send(&sender, src, port, &rsp_xfer);
+    if (bytes_sent > 0)
+        printf("gcoap: msg sent, %u bytes\n", bytes_sent);
+    else
+        puts("gcoap: msg send failed");
 }
 
 static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
@@ -95,7 +94,7 @@ static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_me
             od_hex_dump(xfer->data, xfer->datalen, OD_WIDTH_DEFAULT);
         }
     } else {
-        printf("empty payload\n");
+        printf(", empty payload\n");
     }
 }
 

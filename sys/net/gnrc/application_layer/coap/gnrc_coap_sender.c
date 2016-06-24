@@ -133,9 +133,9 @@ int gnrc_coap_register_listener(gnrc_coap_listener_t *listener, uint16_t port)
                    listener->netreg.demux_ctx);
         } else {
             if (port == 0)
-                return -EINVAL;
-            else
                 listener->netreg.demux_ctx++;       /* try next port number */
+            else
+                return -EINVAL;                     /* requested port already in use */
         }
     }
     return 0;
