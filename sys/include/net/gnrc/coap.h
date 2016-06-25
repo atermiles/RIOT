@@ -9,16 +9,38 @@
 /**
  * @defgroup    net_gnrc_coap  CoAP
  * @ingroup     net_gnrc
- * @brief       GNRC implementation of CoAP protocol
+ * @brief       GNRC implementation of CoAP protocol, RFC 7252
  * 
- * Provides a CoAP message processing thread, and explicit support for client 
- * and server based use of CoAP.
+ * ## Architecture ##
+ * Requests and responses are exchanged via an asynchronous RIOT message processing 
+ * thread. A thread listener is described generically in a \link gnrc_coap_listener_t 
+ * \endlink struct. 
+ * There are two concrete implementations of a listener: a \link gnrc_coap_server_t 
+ * \endlink server, and a \link gnrc_coap_sender_t \endlink, which describes sending 
+ * both a client request and a server response. Both structs provide a callback 
+ * function for handling message reception.
+ * 
+ * A message itself is described by a couple of structs: a \link gnrc_coap_meta_t
+ * \endlink for message metadata like message type and message ID, and a \link 
+ * gnrc_coap_transfer_t \endlink for passing the resource representation. We expect 
+ * that the resources to be transferred will be maintained in an application-specific 
+ * manner. CoAP is  responsible for transferring the resource, while the application 
+ * stores it.
+ * 
+ * ## Using GNRC CoAP ##
+ * Below are overviews of client and server use. Also see the gcoap example CLI 
+ * application.
  * 
  * ### Client Use ###
- * Use gnrc_coap_register_client() on a client struct, which assigns an ephemeral 
- * source port for requests. This port then allows matching a (non-confirmable) 
- * response on this port to the client. Use of a per-client source port reduces 
- * the need for a CoAP token to demux responses.
+ * Use gnrc_coap_send() to send a message described by msg_meta and resource transfer 
+ * structs. Since responses are received asynchronously, the caller must retain
+ * the sender struct. GNRC CoAP automatically sets up a listener for the response.
+ * An application receives the response from the sender's message callback.
+ * 
+ * ### Server Use ###
+ * Use gnrc_coap_start_server() to start listening for requests. A server receives
+ * a request from the server struct's message callback. Use gnrc_coap_send() to 
+ * send the response.
  * 
  * @{
  *
@@ -237,8 +259,8 @@ typedef struct {
 } gnrc_coap_transfer_t;
 
 /**
- * @brief   Listener for incoming messages, whether unsolicited to a server or 
- *          an expected response to a sender.
+ * @brief   Listener for incoming messages, whether unsolicited for a server or 
+ *          an expected response for a sender.
  * 
  * The network registration allows demuxing among listeners by supporting use 
  * of a unique source port per listener.

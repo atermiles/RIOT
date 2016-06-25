@@ -322,6 +322,12 @@ static void _receive_request(gnrc_coap_server_t *server, gnrc_coap_meta_t *msg_m
 static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
                                                           gnrc_coap_transfer_t *xfer)
 {
+    /* Validate response */
+    if (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_REQUEST)) {
+        DEBUG("coap: response failure\n");
+        return;
+    }
+
     /* Validate token */
     if (msg_meta->tokenlen != sender->msg_meta.tokenlen) {
         DEBUG("coap: response failure\n");
