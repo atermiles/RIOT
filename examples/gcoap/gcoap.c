@@ -54,7 +54,7 @@ static void handle_request(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfe
             printf("[%u] /%.*s\n", i, seglen, path_seg);
             i++;
         } else if (i == 0) {
-            printf("/\n");
+            printf("[0] /\n");
         }
     } while (seglen > 0);
 
@@ -79,7 +79,10 @@ static void handle_request(gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfe
 static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_meta, 
                                                         gnrc_coap_transfer_t *xfer)
 {
-    char *class_str = (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_SUCCESS)) 
+    char *class_str;
+    (void)sender;
+    
+    class_str = (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_SUCCESS)) 
                             ? "Success" : "Error";
     printf("gcoap: response %s, code %1u.%02u", class_str, 
                                                    (msg_meta->xfer_code & 0xE0) >> 5,
@@ -135,10 +138,13 @@ static void start_server(char *port_str)
         return;
     }
 
-    if (gnrc_coap_start_server(&server, port) == 0)
+    if (gnrc_coap_start_server(&server, port) == 0) {
         printf("gcoap: started CoAP server on port %" PRIu16 "\n", port);
-    else
+        /* Used as source port in responses; however, not registered as a listener */
+        sender.listener.netreg.demux_ctx = server.listener.netreg.demux_ctx;
+    } else {
         printf("gcoap: failed to start CoAP server on port %" PRIu16 "\n", port);
+    }
 }
 
 int gcoap_cmd(int argc, char **argv)

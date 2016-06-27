@@ -1,14 +1,25 @@
 # gCoAP Example
 
-This application provides command line access to a GNRC implementation of CoAP. 
-See the [CoAP spec][1] for background.
+This application provides command line access to a GNRC implementation of CoAP. See the [CoAP spec][1] for background, and the Modules>Networking>GNRC>CoAP topic in the source documentation for the structure of the implementation.
 
-We provide two flavors of Makefile for this example:
+We support two setup options for this example:
 
-* `Makefile` -- native networking
-* `Makefile.slip` -- SLIP-based border router
+### Native networking
+Build with the standard `Makefile`. Follow the setup [generic instructions][2] on the RIOT wiki, especially for TAP-based network setup.
 
-See README-slip.md for details on setup of the SLIP flavor.
+### SLIP-based border router
+
+Build with `Makefile.slip`. Follow the setup instructions in README-slip.md, which are based on [6LBR instructions][3] on the Wiki. We also plan to provide or reference the ethos/UHCP instructions, but we haven't tried this option yet.
+
+## Current Status
+gCoAP is a work in progress (WIP), and is minimally useful. Available features include:
+
+* Server listens on a port, and provides a callback for generation of an application-specific response.
+* Client uses gnrc_coap_send() for a request, and listens for a response via a callback. Matches response on IP port and CoAP token.
+* Message Type: Supports non-confirmable (NON) messaging.
+* Options: Supports URI-Path (ASCII, no percent-encoding) and Content-Format.
+* Payload: We have tested only with text payloads, but others should work, including CBOR as Content-Format 60.
+
 
 ## Example Use
 This example uses gCoAP to set up a server on one endpoint (board), configured as address aaaa::1, and then queries it for resources from another endpoint.
@@ -29,6 +40,8 @@ Example response:
 
     > gcoap: response Success, code 2.05, empty payload
 
-No resources on the server, which is expected from the default gCoAP server.
+The response indicates no resources on the server, which is expected from the default gCoAP server.
 
-[1]: https://tools.ietf.org/html/rfc7252        "CoAP spec"
+[1]: https://tools.ietf.org/html/rfc7252    "CoAP spec"
+[2]: https://github.com/RIOT-OS/RIOT/wiki/Creating-your-first-RIOT-project    "generic instructions"
+[3]: https://github.com/RIOT-OS/RIOT/blob/master/examples/gnrc_border_router/README.md    "6LBR instructions"

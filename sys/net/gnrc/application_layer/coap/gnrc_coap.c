@@ -354,6 +354,9 @@ static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener, ipv6_a
     int result;
     
     /* Fill in the metadata and transfer data */
+    xfer.path_source = GNRC_COAP_PATHSOURCE_OPTIONS;
+    xfer.pathlen     = 0;
+    
     result =_coap_parse(pkt, &msg_meta, &xfer);
     if (result < 0) {
         DEBUG("coap: parse failure: %d\n", result);
@@ -490,6 +493,7 @@ int gnrc_coap_pathcmp(gnrc_coap_transfer_t *xfer, char *path)
                     break;
                 xferlen += seglen;
             }
+            DEBUG("coap: pathcmp seglen: %u; xferlen: %u\n", seglen, xferlen);
 
             for (; i < xferlen && i < pathlen; i++) {
                 if (*xfer_seg == *path) {           /* compare char by char */
@@ -501,6 +505,7 @@ int gnrc_coap_pathcmp(gnrc_coap_transfer_t *xfer, char *path)
             }
             seg_index++;
         }
+        DEBUG("coap: pathcmp pathlen: %u\n", pathlen);
         return (xferlen < pathlen) ? -1 : 0;
  
     } else if (xfer->path_source == GNRC_COAP_PATHSOURCE_STRING) {

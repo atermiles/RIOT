@@ -18,7 +18,7 @@
  * There are two concrete implementations of a listener: a \link gnrc_coap_server_t 
  * \endlink server, and a \link gnrc_coap_sender_t \endlink, which describes sending 
  * both a client request and a server response. Both structs provide a callback 
- * function for handling message reception.
+ * function for an application to handle message reception.
  * 
  * A message itself is described by a couple of structs: a \link gnrc_coap_meta_t
  * \endlink for message metadata like message type and message ID, and a \link 
@@ -358,7 +358,7 @@ int gnrc_coap_start_server(gnrc_coap_server_t *server, uint16_t port);
  * 
  * @return true on success
  */
-inline bool gnrc_coap_is_class(gnrc_coap_code_t code, gnrc_coap_code_t class)
+static inline bool gnrc_coap_is_class(gnrc_coap_code_t code, gnrc_coap_code_t class)
 {
     return code >= class && code <= (class + 0xF);
 }
