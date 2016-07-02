@@ -242,24 +242,30 @@ static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_co
     }
     
     /* Read options */
+    xfer->path_source = GNRC_COAP_PATHSOURCE_OPTIONS;
+    xfer->path        = NULL;
+    xfer->pathlen     = 0;
     while (parse_ptr < snip_end && *parse_ptr != GNRC_COAP_PAYLOAD_MARKER) {
         opt_delta = (*parse_ptr & 0xF0) >> 4;        /* assume not extended (13/14) */
         optnum   += opt_delta;
         optlen    = *parse_ptr & 0xF;
+        /* TODO verify not past snip_end */
         
         if (optnum == GNRC_COAP_OPT_CONTENT_FORMAT) {
             if (_parse_format_option(xfer, parse_ptr+1, optlen) < 0)
                 return -EINVAL;
-        } else if (optnum == GNRC_COAP_OPT_URI_PATH && opt_delta != 0) {
+        } else if (optnum == GNRC_COAP_OPT_URI_PATH) {
             /* first path option */
-            xfer->path_source = GNRC_COAP_PATHSOURCE_OPTIONS;
-            xfer->path        = (char *)parse_ptr + 1;
-            xfer->pathlen     = optlen;
+            if (opt_delta != 0)
+                xfer->path = (char *)parse_ptr;
+            xfer->pathlen++;
         }
         parse_ptr += optlen + 1;
     }
 
     /* Record data location */
+    xfer->data    = NULL;
+    xfer->datalen = 0;
     if (parse_ptr < snip_end) {
         if (*parse_ptr == GNRC_COAP_PAYLOAD_MARKER) {
             xfer->data    = ++parse_ptr;
@@ -267,9 +273,6 @@ static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_co
         } else {
             return -EINVAL;  /* no payload indicated */
         }
-    } else {
-        xfer->data    = NULL;
-        xfer->datalen = 0;
     }
     return 0;
 }
@@ -324,19 +327,19 @@ static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_
 {
     /* Validate response */
     if (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_REQUEST)) {
-        DEBUG("coap: response failure\n");
+        DEBUG("coap: response code failure\n");
         return;
     }
 
     /* Validate token */
     if (msg_meta->tokenlen != sender->msg_meta.tokenlen) {
-        DEBUG("coap: response failure\n");
+        DEBUG("coap: response tokenlen failure\n");
         return;
     }
 
     for (uint8_t i = 0; i < msg_meta->tokenlen; i++) {
         if (msg_meta->token[i] != sender->msg_meta.token[i]) {
-            DEBUG("coap: response failure\n");
+            DEBUG("coap: response token failure\n");
             return;
         }
     }
@@ -422,13 +425,17 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     token_ptr = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr4_t);
     opts_ptr  = token_ptr + msg_meta->tokenlen;
 
-    /* only generate token for request; assume already copied for response */
+    /* only generate token for request; assume already generated for response */
     if (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_REQUEST)) {
-        for (; token_ptr < opts_ptr; token_ptr += 4) {
+        for (uint8_t i = 0; i < msg_meta->tokenlen; i += 4) {
             rand = random_uint32();
-            memcpy(token_ptr, &rand, opts_ptr-token_ptr >= 4 ? 4 : opts_ptr-token_ptr);
+            memcpy(&msg_meta->token[i],         /* store token for response matching */
+                   &rand, 
+                   msg_meta->tokenlen - i >= 4 ? 4 : msg_meta->tokenlen - i);
         }
     }
+    memcpy(token_ptr, &msg_meta->token[0], msg_meta->tokenlen);
+
     _do_options(opts_ptr, xfer);
     
     if (payload != NULL)
@@ -439,7 +446,7 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
 
 uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, char **path_seg)
 {
-    uint8_t seglen, i = 0, opt_delta = 0;
+    uint8_t seglen, i, opt_delta = 0;
     uint8_t *xferpath = (uint8_t *)xfer->path;
     /* xferpath as char*; must be lvalue for path_seg */
     char *pathstr = NULL;
@@ -448,14 +455,16 @@ uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, cha
         return 0;
     }
 
-    if (xferpath != NULL) {
-        seglen = xfer->pathlen;
-        DEBUG("coap: found seg %u; seglen: %u\n", i, seglen);
+    /* sanity check */
+    if (xferpath != NULL && seg_index < xfer->pathlen) {
+        seglen = *xferpath & 0xF;
+        xferpath++;
+        DEBUG("coap: found seg 0 of %u; seglen: %u\n", xfer->pathlen, seglen);
     } else {
         return 0;
     }
     
-    for (; i < seg_index && opt_delta == 0; i++) {
+    for (i = 0; i < seg_index; i++) {
         xferpath += seglen;                     /* find next segment */
         opt_delta = (*xferpath & 0xF0) >> 4;
         if (opt_delta == 0) {
@@ -465,6 +474,7 @@ uint8_t gnrc_coap_get_pathseg(gnrc_coap_transfer_t *xfer, uint8_t seg_index, cha
         } else {                                /* no more segments */
             seglen   = 0;
             xferpath = NULL;
+            break;
         }
     }
     pathstr   = (char *)xferpath;           /* init lvalue */

@@ -28,6 +28,7 @@ USEMODULE += gnrc_icmpv6_echo
 
 # Required by gcoap
 USEMODULE += od
+USEMODULE += fmt
 # Add also the shell, some shell commands
 USEMODULE += shell
 USEMODULE += shell_commands

@@ -249,10 +249,11 @@ typedef struct {
  * Useful for sending to a client, or as received from a server.
  */
 typedef struct {
-    gnrc_coap_path_source_t path_source; /**< Source of path data: string or options data; if
-                                              options, path attribute points to the first option */
-    char *path;                          /**< Path to resource */
-    size_t pathlen;                      /**< Length of path, to make it safer to read path */
+    gnrc_coap_path_source_t path_source; /**< Source of path data: string or options data */
+    char *path;                          /**< Path to resource; if options data, points to
+                                              the header for the first option */
+    size_t pathlen;                      /**< Length of path; if options data, the count of
+                                              Uri-Path options (segments) */
     uint8_t *data;                       /**< Data for resource representation */
     size_t datalen;                      /**< Length of data */
     gnrc_coap_media_type_t data_format;  /**< Format for data, defaults to octet */

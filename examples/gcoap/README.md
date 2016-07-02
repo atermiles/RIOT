@@ -17,8 +17,7 @@ gCoAP is a work in progress (WIP), and is minimally useful. Available features i
 * Server listens on a port, and provides a callback for generation of an application-specific response.
 * Client uses gnrc_coap_send() for a request, and listens for a response via a callback. Matches response on IP port and CoAP token.
 * Message Type: Supports non-confirmable (NON) messaging.
-* Options: Supports URI-Path (ASCII, no percent-encoding) and Content-Format.
-* Payload: We have tested only with text payloads, but others should work, including CBOR as Content-Format 60.
+* Options: Supports URI-Path (ASCII, no percent-encoding) and Content-Format for payload.
 
 
 ## Example Use

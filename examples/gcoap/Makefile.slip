@@ -48,6 +48,7 @@ USEMODULE += gnrc_sixlowpan_border_router_default
 USEMODULE += gnrc_icmpv6_echo
 
 USEMODULE += od
+USEMODULE += fmt
 # Add also the shell, some shell commands
 USEMODULE += shell
 USEMODULE += shell_commands
