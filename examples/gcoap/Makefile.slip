@@ -34,7 +34,6 @@ CFLAGS += -DSLIP_BAUDRATE=$(SLIP_BAUDRATE)
 USEMODULE += gnrc_netdev_default
 USEMODULE += auto_init_gnrc_netif
 # Specify the mandatory networking modules
-USEMODULE += gnrc_ipv6_router_default
 USEMODULE += gnrc_coap
 # Add a routing protocol
 USEMODULE += gnrc_rpl

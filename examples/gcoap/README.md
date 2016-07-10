@@ -25,7 +25,7 @@ This example uses gCoAP to set up a server on one endpoint (board), configured a
 
 ### Server setup
 
-    coap s 5683
+    coap server 5683
 
 Expected response:
 
@@ -33,7 +33,7 @@ Expected response:
 
 ### Client query
 
-    coap c get aaaa::1 5683 /.well-known/core
+    coap get aaaa::1 5683 /.well-known/core
 
 Example response:
 
