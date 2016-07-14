@@ -57,6 +57,7 @@
 #include "net/gnrc.h"
 #include "net/gnrc/ipv6.h"
 #include "net/gnrc/udp.h"
+#include "xtimer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -82,6 +83,12 @@ extern "C" {
 
 /** @brief Byte marker to separate header from payload */
 #define GNRC_COAP_PAYLOAD_MARKER (0xFF)
+
+/** @brief Default time to wait for a response, in usec */
+#define GNRC_COAP_RESPONSE_TIMEOUT        (5000000)
+
+/** @brief Identifies a timeout message when waiting for a response */
+#define GNRC_COAP_MSG_TYPE_TIMEOUT        (0x1501)
 
 /**
  *  @brief Message type enum -- confirmable, non-confirmable, etc.
@@ -187,10 +194,11 @@ gnrc_coap_listen_mode_t;
  */
 typedef enum
 {
-    GNRC_COAP_XFER_INIT,      /**< No  messaging yet */
-    GNRC_COAP_XFER_REQ,       /**< Request sent */
-    GNRC_COAP_XFER_FAIL,      /**< Request failed */
-    GNRC_COAP_XFER_SUCCESS    /**< Got response; acknowledged */
+    GNRC_COAP_XFER_INIT,        /**< No  messaging yet */
+    GNRC_COAP_XFER_REQ,         /**< Request sent */
+    GNRC_COAP_XFER_REQ_TIMEOUT, /**< Timeout waiting for response */
+    GNRC_COAP_XFER_FAIL,        /**< Request failed */
+    GNRC_COAP_XFER_SUCCESS      /**< Got response; acknowledged */
 }
 gnrc_coap_xfer_state_t;
 
@@ -284,6 +292,8 @@ typedef struct coap_sender {
     gnrc_coap_meta_t msg_meta;           /**< Request metadata for header */
     gnrc_coap_transfer_t *xfer;          /**< Request transfer details (optional, for retries) */
     gnrc_coap_listener_t listener;       /**< Listens for a response from the server */
+    xtimer_t response_timer;             /**< Limits wait for response */
+    msg_t timeout_msg;                   /**< Timeout message to limit wait for response */
     void (*response_cbf)(struct coap_sender*, gnrc_coap_meta_t*, gnrc_coap_transfer_t*);    
                                          /**< Callback for server response */
 } gnrc_coap_sender_t;

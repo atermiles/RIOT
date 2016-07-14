@@ -39,6 +39,7 @@ static gnrc_coap_sender_t sender = { .xfer_state   = 0,
                                      .xfer         = NULL, 
                                      .listener     = {{NULL, 0, KERNEL_PID_UNDEF}, 
                                                       GNRC_COAP_LISTEN_RESPONSE, &sender, NULL},
+                                     .timeout_msg  = {0, GNRC_COAP_MSG_TYPE_TIMEOUT, {0}},
                                      .response_cbf = handle_response};
 
 /* Request handling for server */
@@ -96,6 +97,14 @@ static void handle_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_me
     char *class_str;
     (void)sender;
     
+    if (sender->xfer_state == GNRC_COAP_XFER_REQ_TIMEOUT) {
+        printf("gcoap: timeout waiting for msg ID %u\n", sender->msg_meta.message_id);
+        return;
+    } else if (sender->xfer_state == GNRC_COAP_XFER_FAIL) {
+        printf("gcoap: failure handling response for msg\n");
+        return;
+    }
+    
     class_str = (gnrc_coap_is_class(msg_meta->xfer_code, GNRC_COAP_CLASS_SUCCESS)) 
                             ? "Success" : "Error";
     printf("gcoap: response %s, code %1u.%02u", class_str, 
@@ -133,10 +142,9 @@ static void send(char *addr_str, char *port_str, gnrc_coap_transfer_t *xfer)
         return;
     }
 
-    puts("gcoap: about to send");
     bytes_sent = gnrc_coap_send(&sender, &addr, port, xfer);
     if (bytes_sent > 0)
-        printf("gcoap: msg sent, %u bytes\n", bytes_sent);
+        printf("gcoap: sent msg ID %u, %u bytes\n", sender.msg_meta.message_id, bytes_sent);
     else
         puts("gcoap: msg send failed");
 }

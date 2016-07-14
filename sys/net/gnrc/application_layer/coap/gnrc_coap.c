@@ -46,6 +46,7 @@ static char _msg_stack[GNRC_COAP_STACK_SIZE];
 static int _coap_parse(gnrc_pktsnip_t *snip, gnrc_coap_meta_t *msg_meta, gnrc_coap_transfer_t *xfer);
 static void *_event_loop(void *arg);
 static int _do_options(uint8_t *optsfld, gnrc_coap_transfer_t *xfer);
+static void _expire_request(gnrc_coap_sender_t *sender);
 static int _parse_format_option(gnrc_coap_transfer_t *xfer, uint8_t *optval, 
                                                             uint8_t optlen);
 static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener, ipv6_addr_t *src,
@@ -107,6 +108,9 @@ static void *_event_loop(void *arg)
                 _receive(pkt, listener, src_addr, port);
                 break;
                 
+            case GNRC_COAP_MSG_TYPE_TIMEOUT:
+                _expire_request((gnrc_coap_sender_t *)msg_rcvd.content.ptr);
+                break;
 
             default:
                 break;
@@ -343,10 +347,19 @@ static void _receive_response(gnrc_coap_sender_t *sender, gnrc_coap_meta_t *msg_
             return;
         }
     }
-
-    /* Pass response to handler */
-    if (sender->response_cbf != NULL)
-        sender->response_cbf(sender, msg_meta, xfer);
+    
+    if (sender->xfer_state == GNRC_COAP_XFER_REQ) {
+        /* Only clear timer within this conditional, to ensure it is valid */
+        xtimer_remove(&sender->response_timer);
+        
+        sender->xfer_state = GNRC_COAP_XFER_SUCCESS;
+        /* Pass response to handler */
+        if (sender->response_cbf != NULL) {
+            sender->response_cbf(sender, msg_meta, xfer);
+        }
+    } else {
+        DEBUG("coap: unexpected response; in state %u\n", sender->xfer_state);
+    }
 }
 
 static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener, ipv6_addr_t *src,
@@ -374,6 +387,21 @@ static void _receive(gnrc_pktsnip_t *pkt, gnrc_coap_listener_t *listener, ipv6_a
         _receive_request((gnrc_coap_server_t *)listener->handler, &msg_meta, &xfer, src, port);
     
     gnrc_pktbuf_release(pkt);
+}
+
+/* Handle receipt of a timeout message */
+static void _expire_request(gnrc_coap_sender_t *sender)
+{   
+    DEBUG("coap: received timeout message\n");
+    if (sender->xfer_state == GNRC_COAP_XFER_REQ) {
+        sender->xfer_state = GNRC_COAP_XFER_REQ_TIMEOUT;
+        /* Pass response to handler */
+        if (sender->response_cbf != NULL)
+            sender->response_cbf(sender, NULL, NULL);
+    } else {
+        /* Response already handled; timeout must have fired while response was  */
+        /* in queue. No need to handle states individually. */
+    }
 }
 
 /* 
@@ -419,7 +447,9 @@ gnrc_pktsnip_t *gnrc_coap_hdr_build(gnrc_coap_meta_t *msg_meta, gnrc_coap_transf
     hdr4->ver_type_tkl = (GNRC_COAP_VERSION << 6) + (msg_meta->msg_type << 4) 
                                                   + msg_meta->tokenlen;
     hdr4->code         = msg_meta->xfer_code;
-    hdr4->message_id   = byteorder_htons(++gnrc_coap_module.last_message_id);
+    
+    msg_meta->message_id = ++gnrc_coap_module.last_message_id;
+    hdr4->message_id     = byteorder_htons(msg_meta->message_id);
     
     /* write variable fields, starting with token */
     token_ptr = (uint8_t *)hdr->data + sizeof(gnrc_coap_hdr4_t);

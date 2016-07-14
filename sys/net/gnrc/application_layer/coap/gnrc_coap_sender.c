@@ -88,15 +88,21 @@ size_t gnrc_coap_send(gnrc_coap_sender_t *sender, ipv6_addr_t *addr, uint16_t po
         gnrc_pktbuf_release(udp);
         return 0;
     }
-    pktlen = gnrc_pkt_len(ip);          /* count now; snips deallocated after send*/
+    pktlen = gnrc_pkt_len(ip);          /* count length now; snips deallocated after send */
     
-    /* send packet */
+    /* start response wait timer */
+    sender->timeout_msg.content.ptr = (char *)sender;
+    xtimer_set_msg(&sender->response_timer, GNRC_COAP_RESPONSE_TIMEOUT, &sender->timeout_msg, 
+                                                                        gnrc_coap_pid_get());
+    /* send message */
     if (!gnrc_netapi_dispatch_send(GNRC_NETTYPE_UDP, GNRC_NETREG_DEMUX_CTX_ALL, ip)) {
         DEBUG("coap: unable to locate UDP thread\n");
+        xtimer_remove(&sender->response_timer);
         gnrc_pktbuf_release(ip);
         return 0;
     }
-    DEBUG("coap: msg sent, %u bytes\n", pktlen);
+    
+    sender->xfer_state = GNRC_COAP_XFER_REQ;
     return pktlen;
 }
 
