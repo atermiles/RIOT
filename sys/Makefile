@@ -92,6 +92,9 @@ endif
 ifneq (,$(filter sema,$(USEMODULE)))
     DIRS += sema
 endif
+ifneq (,$(filter nanocoap,$(USEMODULE)))
+    DIRS += net/application_layer/coap
+endif
 
 DIRS += $(dir $(wildcard $(addsuffix /Makefile, ${USEMODULE})))
 
