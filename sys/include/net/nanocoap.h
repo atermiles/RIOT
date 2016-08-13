@@ -1,3 +1,21 @@
+/*
+ * Copyright and license as defined at
+ * https://github.com/kaspar030/sock/blob/master/nanocoap/nanocoap.h.
+ */
+
+/**
+ * @defgroup    net_nanocoap  nanocoap
+ * @ingroup     net
+ * @brief       Minimal implementation of CoAP protocol, RFC 7252
+ *
+ * @{
+ *
+ * @file
+ * @brief       nanocoap definition
+ *
+ * @author      Kaspar Schleiser <kaspar@schleiser.de>
+ */
+
 #ifndef NANOCOAP_H
 #define NANOCOAP_H
 

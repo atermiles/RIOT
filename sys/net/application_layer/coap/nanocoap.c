@@ -1,9 +1,16 @@
 /*
- * Copyright (c) 2016 Kaspar Schleiser. All rights reserved.
- *  
- * This file is subject to the terms and conditions of the GNU Lesser
- * General Public License v2.1. See the file LICENSE in the top level
- * directory for more details.
+ * Copyright and license as defined at
+ * https://github.com/kaspar030/sock/blob/master/nanocoap/nanocoap.c.
+ */
+
+/**
+ * @ingroup     net_nanocoap
+ * @{
+ *
+ * @file
+ * @brief       Implementation of CoAP protocol
+ *
+ * @author      Kaspar Schleiser <kaspar@schleiser.de>
  */
 
 #include <assert.h>
