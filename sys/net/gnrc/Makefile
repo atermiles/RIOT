@@ -121,5 +121,8 @@ endif
 ifneq (,$(filter gnrc_tftp,$(USEMODULE)))
     DIRS += application_layer/tftp
 endif
+ifneq (,$(filter gnrc_coap,$(USEMODULE)))
+    DIRS += application_layer/coap
+endif
 
 include $(RIOTBASE)/Makefile.base

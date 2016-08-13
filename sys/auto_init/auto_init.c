@@ -88,6 +88,10 @@
 #include "random.h"
 #endif
 
+#ifdef MODULE_GNRC_COAP
+#include "net/gnrc/coap.h"
+#endif
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -157,6 +161,10 @@ void auto_init(void)
 #ifdef MODULE_LWIP
     DEBUG("Bootstraping lwIP.\n");
     lwip_bootstrap();
+#endif
+#ifdef MODULE_GNRC_COAP
+    DEBUG("Auto init CoAP module.\n");
+    gnrc_coap_init();
 #endif
 
 /* initialize network devices */
