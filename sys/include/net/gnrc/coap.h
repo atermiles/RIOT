@@ -25,8 +25,8 @@
  * @author      Ken Bannister <kb2ma@runbox.com>
  */
 
-#ifndef GNRC_COAP_H_
-#define GNRC_COAP_H_
+#ifndef GCOAP_H_
+#define GCOAP_H_
 
 #include "net/gnrc.h"
 #include "net/gnrc/ipv6.h"
@@ -66,5 +66,5 @@ kernel_pid_t gcoap_init(void);
 }
 #endif
 
-#endif /* GNRC_COAP_H_ */
+#endif /* GCOAP_H_ */
 /** @} */
