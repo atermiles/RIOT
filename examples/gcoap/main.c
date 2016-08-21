@@ -11,7 +11,7 @@
  * @{
  *
  * @file
- * @brief       gcoap (GNRC CoAP) example
+ * @brief       gcoap example
  *
  * @author      Ken Bannister <kb2ma@runbox.com>
  *

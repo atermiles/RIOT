@@ -1,3 +1,3 @@
-MODULE = gnrc_coap
+MODULE = gcoap
 
 include $(RIOTBASE)/Makefile.base

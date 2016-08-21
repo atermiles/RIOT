@@ -67,7 +67,18 @@ typedef struct {
 extern const coap_endpoint_t endpoints[];
 extern const unsigned nanocoap_endpoints_numof;
 
+/**
+ * @brief   Parses buffer into a coap packet data structure.
+ *
+ * @param[out] pkt  Packet data structure
+ * @param[in] buf   Buffer containing CoAP header and payload
+ * @param[in] len   Length of buffer
+ *
+ * @return 0       on success
+ * @return -BADMSG on a format error in the buffer
+ */
 int coap_parse(coap_pkt_t* pkt, uint8_t *buf, size_t len);
+
 ssize_t coap_build_reply(coap_pkt_t *pkt, unsigned code,
         uint8_t *rbuf, unsigned rlen,
         uint8_t *payload, unsigned payload_len);
