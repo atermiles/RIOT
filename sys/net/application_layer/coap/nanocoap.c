@@ -102,10 +102,10 @@ int coap_parse(coap_pkt_t *pkt, uint8_t *buf, size_t len)
         }
     }
 
-    DEBUG("nanocoap: coap pkt parsed. code=%u detail=%u payload_len=%u, 0x%02x\n",
-            coap_get_code_class(pkt),
-            coap_get_code_detail(pkt),
-            pkt->payload_len, hdr->code);
+    DEBUG("nanocoap: parsed pkt, code=%u.%u id=%" PRIu16 " payload_len=%u\n",
+            coap_get_code_class(pkt), coap_get_code_detail(pkt),
+            coap_get_id(pkt),
+            pkt->payload_len);
 
     return 0;
 }
