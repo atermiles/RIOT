@@ -13,8 +13,8 @@
  * @file
  * @brief       Private implementation of gcoap
  *
- * This header includes functions accessible only by the implementation of GNRC
- * COAP. See sys/include/net/gnrc/coap.h for the public interface.
+ * This header includes functions accessible only by the implementation of 
+ * gcoap. See sys/include/net/gnrc/coap.h for the public interface.
  *
  * @author      Ken Bannister <kb2ma@runbox.com>
  * @}

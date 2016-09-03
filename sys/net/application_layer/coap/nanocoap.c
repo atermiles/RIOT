@@ -20,7 +20,7 @@
 
 #include "net/nanocoap.h"
 
-#define ENABLE_DEBUG (1)
+#define ENABLE_DEBUG (0)
 #include "debug.h"
 
 static int _decode_value(unsigned val, uint8_t **pkt_pos_ptr, uint8_t *pkt_end);
@@ -58,6 +58,7 @@ int coap_parse(coap_pkt_t *pkt, uint8_t *buf, size_t len)
     uint8_t *pkt_end = buf + len;
 
     memset(pkt->url, '\0', NANOCOAP_URL_MAX);
+    pkt->payload_len = 0;
 
     /* token value (tkl bytes) */
     pkt_pos += coap_get_token_len(pkt);
@@ -112,9 +113,13 @@ int coap_parse(coap_pkt_t *pkt, uint8_t *buf, size_t len)
 
 ssize_t coap_handle_req(coap_pkt_t *pkt, uint8_t *resp_buf, unsigned resp_buf_len)
 {
-    if (coap_get_code_class(pkt) != COAP_REQ) {
+    if (coap_get_code_class(pkt) != COAP_CLASS_REQ) {
         puts("coap_handle_req(): not a request.");
         return -EBADMSG;
+    }
+    if (coap_get_type(pkt) != COAP_TYPE_NON) {
+        puts("coap_handle_req(): not non-confirmable.");
+        return -ENOTSUP;
     }
 
 //    unsigned url_len = strlen((char*)pkt->url);
@@ -147,15 +152,16 @@ ssize_t coap_build_reply(coap_pkt_t *pkt, unsigned code,
 
     memcpy(rbuf, pkt->hdr, len);
 
-    coap_hdr_set_type((coap_hdr_t*)rbuf, COAP_RESP);
+    coap_hdr_set_type((coap_hdr_t*)rbuf, COAP_TYPE_NON);
     coap_hdr_set_code((coap_hdr_t*)rbuf, code);
 
     if (payload_len) {
         rbuf += len;
         /* insert end of option marker */
-        *rbuf++ = 0xFF;
-        if (payload != rbuf) {
-            memcpy(rbuf + len, payload, payload_len);
+        *rbuf = 0xFF;
+        if (payload) {
+            rbuf++;
+            memcpy(rbuf, payload, payload_len);
         }
         len += payload_len +1;
     }
