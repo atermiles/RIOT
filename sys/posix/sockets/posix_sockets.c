@@ -191,46 +191,6 @@ static inline int _get_data_from_sockaddr(const struct sockaddr *address, size_t
     return 0;
 }
 
-static int _implicit_bind(socket_t *s, void *addr)
-{
-    ipv6_addr_t unspec;
-    ipv6_addr_t *best_match;
-    int res;
-
-    /* TODO: ensure that this port hasn't been used yet */
-    s->src_port = (uint16_t)random_uint32_range(1LU << 10U, 1LU << 16U);
-
-    /* find the best matching source address */
-    if ((best_match = conn_find_best_source(addr)) == NULL) {
-        ipv6_addr_set_unspecified(&unspec);
-        best_match = &unspec;
-    }
-    switch (s->type) {
-#ifdef MODULE_CONN_TCP
-        case SOCK_STREAM:
-            res = conn_tcp_create(&s->conn.udp, best_match, sizeof(unspec),
-                                  s->domain, s->src_port);
-            break;
-#endif
-#ifdef MODULE_CONN_UDP
-        case SOCK_DGRAM:
-            res = conn_udp_create(&s->conn.udp, best_match, sizeof(unspec),
-                                  s->domain, s->src_port);
-            break;
-#endif
-        default:
-            res = -1;
-            break;
-    }
-    if (res < 0) {
-        errno = -res;
-    }
-    else {
-        s->bound = true;
-    }
-    return res;
-}
-
 static int socket_close(int socket)
 {
     socket_t *s;

@@ -70,6 +70,15 @@ ifneq (,$(filter gnrc_zep,$(USEMODULE)))
   USEMODULE += xtimer
 endif
 
+ifneq (,$(filter gcoap,$(USEMODULE)))
+  USEMODULE += gnrc_udp
+  USEMODULE += nanocoap
+endif
+
+ifneq (,$(filter nanocoap,$(USEMODULE)))
+    USEMODULE += posix_sockets
+endif
+
 ifneq (,$(filter gnrc_tftp,$(USEMODULE)))
   USEMODULE += gnrc_udp
   USEMODULE += xtimer
