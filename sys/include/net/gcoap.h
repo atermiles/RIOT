@@ -25,6 +25,8 @@
  * port, which supports RFC 6282 compression. Internally, gcoap depends on the
  * nanocoap package for base level structs and functionality.
  *
+ * gcoap supports the Observe extension (RFC 7641) for a server.
+ *
  * ## Server Operation ##
  *
  * gcoap listens for requests on GCOAP_PORT, 5683 by default. You can redefine
@@ -109,6 +111,22 @@
  *    _content_type_ attributes.
  * -# Read the payload, if any.
  *
+ * ## Observe Server
+ *
+ * A CoAP client may register for Observe notifications for any resource that
+ * an application has registered with gcoap. An application does not need to
+ * take any action to support Observe client registration.
+ *
+ * To send an Observe notification for a resource, an application must notify
+ * gcoap when the resource changes, via gcoap_resource_changed(). gcoap then
+ * asynchronously creates a notification (response) and executes the resource's
+ * callback, which generates the payload. gcoap then sends the notification to
+ * the endpoint for the Observe client.
+ *
+ * By default, the value for the Observe option in the notification is three
+ * bytes long. For resources that change slowly, this length can be reduced via
+ * GCOAP_OBS_VALUE_WIDTH.
+ *
  * ## Implementation Notes ##
  *
  * ### Building a packet ###
@@ -171,7 +189,7 @@ extern "C" {
 /**
  * @brief Size of the buffer used to write options in a response.
  *
- * Accommodates Content-Format.
+ * Accommodates Content-Format and Observe.
  */
 #define GCOAP_RESP_OPTIONS_BUF  (8)
 
@@ -225,6 +243,60 @@ extern "C" {
  */
 #define GCOAP_MSG_TYPE_INTR    (0x1502)
 
+/** @brief Maximum number of Observe clients; use 2 if not defined */
+#ifndef GCOAP_OBS_CLIENTS_MAX
+#define GCOAP_OBS_CLIENTS_MAX  (2)
+#endif
+
+/**
+ * @brief Maximum number of registrations for Observable resources; use 2 if
+ *        not defined
+ */
+#ifndef GCOAP_OBS_REGISTRATIONS_MAX
+#define GCOAP_OBS_REGISTRATIONS_MAX  (2)
+#endif
+
+/**
+ * @name States for the memo used to track Observe registrations
+ * @{
+ */
+#define GCOAP_OBS_MEMO_UNUSED   (0)  /**< This memo is unused */
+#define GCOAP_OBS_MEMO_IDLE     (1)  /**< Registration OK; no current activity */
+#define GCOAP_OBS_MEMO_PENDING  (2)  /**< Resource changed; notification pending */
+/** @} */
+
+/**
+ * @brief Width in bytes of the Observe option value for a notification.
+ *
+ * This width is used to determine the length of the 'tick' used to measure
+ * the time between observable changes to a resource. A tick is expressed
+ * internally as GCOAP_OBS_TICK_EXPONENT, which is the base-2 log value of the
+ * tick length in microseconds.
+ *
+ * The canonical setting for the value width is 3 (exponent 5), which results
+ * in a tick length of 32 usec, per sec. 3.4, 4.4 of the RFC. Width 2
+ * (exponent 16) results in a tick length of ~65 msec, and width 1 (exponent
+ * 24) results in a tick length of ~17 sec.
+ *
+ * The tick length must be short enough so that the Observe value strictly
+ * increases for each new notification. The purpose of the value is to allow a
+ * client to detect message reordering within the network latency period (128
+ * sec). For resources that change only slowly, the reduced message length is
+ * useful when packet size is limited.
+ */
+#ifndef GCOAP_OBS_VALUE_WIDTH
+#define GCOAP_OBS_VALUE_WIDTH (3)
+#endif
+
+/** @brief See GCOAP_OBS_VALUE_WIDTH. */
+#if (GCOAP_OBS_VALUE_WIDTH == 3)
+#define GCOAP_OBS_TICK_EXPONENT (5)
+#elif (GCOAP_OBS_VALUE_WIDTH == 2)
+#define GCOAP_OBS_TICK_EXPONENT (16)
+#elif (GCOAP_OBS_VALUE_WIDTH == 1)
+#define GCOAP_OBS_TICK_EXPONENT (24)
+#endif
+
 /**
  * @brief  A modular collection of resources for a server
  */
@@ -255,16 +327,30 @@ typedef struct {
     msg_t timeout_msg;                  /**< For response timer */
 } gcoap_request_memo_t;
 
+/** @brief  Memo for Observe registration and notifications */
+typedef struct {
+    unsigned state;                     /**< State of this memo, a GCOAP_OBS_MEMO... */
+    sock_udp_ep_t *observer;            /**< Client endpoint */
+    coap_resource_t *resource;          /**< Entity being observed */
+    uint8_t token[GCOAP_TOKENLEN_MAX];  /**< Client token for notifications */
+    unsigned token_len;                 /**< Actual length of token attribute */
+} gcoap_observe_memo_t;
+
 /**
  * @brief  Container for the state of gcoap itself
  */
 typedef struct {
-    gcoap_listener_t *listeners;       /**< List of registered listeners */
+    gcoap_listener_t *listeners;        /**< List of registered listeners */
     gcoap_request_memo_t open_reqs[GCOAP_REQ_WAITING_MAX];
-                                       /**< Storage for open requests; if first
-                                            byte of an entry is zero, the entry
-                                            is available */
-    uint16_t last_message_id;          /**< Last message ID used */
+                                        /**< Storage for open requests; if first
+                                             byte of an entry is zero, the entry
+                                             is available */
+    uint16_t last_message_id;           /**< Last message ID used */
+    sock_udp_ep_t observers[GCOAP_OBS_CLIENTS_MAX];
+                                        /**< Observe clients; allows reuse for
+                                             observe memos */
+    gcoap_observe_memo_t observe_memos[GCOAP_OBS_REGISTRATIONS_MAX];
+                                        /**< Observed resource registrations */
 } gcoap_state_t;
 
 /**
@@ -410,6 +496,17 @@ static inline ssize_t gcoap_response(coap_pkt_t *pdu, uint8_t *buf, size_t len,
  * @param[out] open_reqs Count of unanswered requests
  */
 void gcoap_op_state(uint8_t *open_reqs);
+
+/**
+ * @brief Notifies gcoap that one of a listener's resources has changed, and
+ * its observers must be notified.
+ *
+ * gcoap generates the Observe notification asynchronously by executing the
+ * resource's callback, and then sends the notification to the observer.
+ *
+ * @param[in] resource Resource that changed
+ */
+void gcoap_resource_changed(coap_resource_t *resource);
 
 #ifdef __cplusplus
 }
