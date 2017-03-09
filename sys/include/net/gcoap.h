@@ -189,9 +189,16 @@ extern "C" {
 /**
  * @brief Size of the buffer used to write options in a response.
  *
- * Accommodates Content-Format and Observe.
+ * Accommodates Content-Format.
  */
 #define GCOAP_RESP_OPTIONS_BUF  (8)
+
+/**
+ * @brief Size of the buffer used to write options in an Observe notification.
+ *
+ * Accommodates Content-Format and Observe.
+ */
+#define GCOAP_OBS_OPTIONS_BUF  (8)
 
 /** @brief Maximum number of requests awaiting a response */
 #define GCOAP_REQ_WAITING_MAX   (2)
@@ -329,7 +336,6 @@ typedef struct {
 
 /** @brief  Memo for Observe registration and notifications */
 typedef struct {
-    unsigned state;                     /**< State of this memo, a GCOAP_OBS_MEMO... */
     sock_udp_ep_t *observer;            /**< Client endpoint */
     coap_resource_t *resource;          /**< Entity being observed */
     uint8_t token[GCOAP_TOKENLEN_MAX];  /**< Client token for notifications */
@@ -489,6 +495,40 @@ static inline ssize_t gcoap_response(coap_pkt_t *pdu, uint8_t *buf, size_t len,
 }
 
 /**
+ * @brief  Initializes a CoAP Observe notification packet on a buffer, for the
+ * observer registered for a resource.
+ *
+ * First verifies that an observer has been registered for the resource.
+ *
+ * @param[in] pdu Notification metadata
+ * @param[in] buf Buffer containing the PDU
+ * @param[in] len Length of the buffer
+ * @param[in] resource Resource for the notification
+ *
+ * @return 0 on success
+ * @return -1 on error
+ * @return -2 if no observer for resource
+ */
+int gcoap_obs_init(coap_pkt_t *pdu, uint8_t *buf, size_t len,
+                                                  const coap_resource_t *resource);
+
+/**
+ * @brief  Sends a buffer containing a CoAP Observe notification to the
+ * observer registered for a resource.
+ *
+ * Assumes a single observer for a resource.
+ *
+ * @param[in] buf Buffer containing the PDU
+ * @param[in] len Length of the buffer
+ * @param[in] remote Destination for the packet
+ * @param[in] resource Resource to send
+ *
+ * @return length of the packet
+ * @return 0 if cannot send
+ */
+size_t gcoap_obs_send(uint8_t *buf, size_t len, const coap_resource_t *resource);
+
+/**
  * @brief Provides important operational statistics.
  *
  * Useful for monitoring.
@@ -496,17 +536,6 @@ static inline ssize_t gcoap_response(coap_pkt_t *pdu, uint8_t *buf, size_t len,
  * @param[out] open_reqs Count of unanswered requests
  */
 void gcoap_op_state(uint8_t *open_reqs);
-
-/**
- * @brief Notifies gcoap that one of a listener's resources has changed, and
- * its observers must be notified.
- *
- * gcoap generates the Observe notification asynchronously by executing the
- * resource's callback, and then sends the notification to the observer.
- *
- * @param[in] resource Resource that changed
- */
-void gcoap_resource_changed(coap_resource_t *resource);
 
 #ifdef __cplusplus
 }

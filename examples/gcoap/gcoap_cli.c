@@ -119,7 +119,6 @@ static size_t _send(uint8_t *buf, size_t len, char *addr_str, char *port_str)
     bytes_sent = gcoap_req_send2(buf, len, &remote, _resp_handler);
     if (bytes_sent > 0) {
         req_count++;
-        gcoap_resource_changed((coap_resource_t *)&_resources[0]);
     }
     return bytes_sent;
 }
@@ -153,6 +152,16 @@ int gcoap_cli_cmd(int argc, char **argv)
                                                                    (unsigned) len);
                 if (!_send(&buf[0], len, argv[2], argv[3])) {
                     puts("gcoap_cli: msg send failed");
+                }
+                else {
+                    /* send Observe notification for /cli/stats */
+                    int res = gcoap_obs_init(&pdu, &buf[0], GCOAP_PDU_BUF_SIZE,
+                                                            &_resources[0]);
+                    if (res == 0) {
+                        size_t payload_len = fmt_u16_dec((char *)pdu.payload, req_count);
+                        len = gcoap_finish(&pdu, payload_len, COAP_FORMAT_TEXT);
+                        gcoap_obs_send(&buf[0], len, &_resources[0]);
+                    }
                 }
                 return 0;
             }

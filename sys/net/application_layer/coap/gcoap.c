@@ -45,7 +45,8 @@ static void _find_resource(coap_pkt_t *pdu, coap_resource_t **resource_ptr,
 static int _find_observer(sock_udp_ep_t **observer, sock_udp_ep_t *remote);
 static int _find_obs_memo(gcoap_observe_memo_t **memo, sock_udp_ep_t *remote,
                                                        coap_pkt_t *pdu);
-static void _send_observe_notification(gcoap_observe_memo_t *memo);
+static void _find_obs_memo_resource(gcoap_observe_memo_t **memo,
+                                   const coap_resource_t *resource);
 
 /* Internal variables */
 const coap_resource_t _default_resources[] = {
@@ -100,12 +101,6 @@ static void *_event_loop(void *arg)
                     break;
                 default:
                     break;
-            }
-        }
-
-        for (int i = 0; i < GCOAP_OBS_REGISTRATIONS_MAX; i++) {
-            if (_coap_state.observe_memos[i].state == GCOAP_OBS_MEMO_PENDING) {
-                _send_observe_notification(&_coap_state.observe_memos[i]);
             }
         }
 
@@ -177,23 +172,28 @@ static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
     gcoap_listener_t *listener;
     sock_udp_ep_t *observer    = NULL;
     gcoap_observe_memo_t *memo = NULL;
+    gcoap_observe_memo_t *resource_memo = NULL;
 
     _find_resource(pdu, &resource, &listener);
-    if (!resource) {
+    if (resource == NULL) {
         return gcoap_response(pdu, buf, len, COAP_CODE_PATH_NOT_FOUND);
+    }
+    else {
+        /* used below to ensure a memo not already recorded for the resource */
+        _find_obs_memo_resource(&resource_memo, resource);
     }
 
     if (coap_get_observe(pdu) == COAP_OBS_REGISTER) {
         int empty_slot = _find_observer(&observer, remote);
         /* record new observer */
         if (observer == NULL) {
-            if (empty_slot >= 0) {
+            if (empty_slot >= 0 && resource_memo == NULL) {
                 observer = &_coap_state.observers[empty_slot];
                 memcpy(observer, remote, sizeof(sock_udp_ep_t));
             }
             else {
                 coap_clear_observe(pdu);
-                DEBUG("gcoap: no space for observer\n");
+                DEBUG("gcoap: can't register observer\n");
             }
         }
 
@@ -202,16 +202,15 @@ static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
             empty_slot = _find_obs_memo(&memo, remote, pdu);
             /* record observe memo */
             if (memo == NULL) {
-                if (empty_slot >= 0) {
+                if (empty_slot >= 0 && resource_memo == NULL) {
                     memo = &_coap_state.observe_memos[empty_slot];
                 }
                 else {
                     coap_clear_observe(pdu);
-                    DEBUG("gcoap: no space for observe memo\n");
+                    DEBUG("gcoap: can't register observe memo\n");
                 }
             }
             if (memo != NULL) {
-                memo->state     = GCOAP_OBS_MEMO_IDLE;
                 memo->observer  = observer;
                 memo->resource  = resource;
                 memo->token_len = coap_get_token_len(pdu);
@@ -230,8 +229,8 @@ static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
         /* clear memo, and clear observer if no other memos */
         if (memo != NULL) {
             DEBUG("gcoap: Deregistering observer for: %s\n", memo->resource->path);
-            memo->state = GCOAP_OBS_MEMO_UNUSED;
-            memo        = NULL;
+            memo->observer = NULL;
+            memo           = NULL;
             _find_obs_memo(&memo, remote, NULL);
             if (memo == NULL) {
                 _find_observer(&observer, remote);
@@ -259,8 +258,8 @@ static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
 /*
  * Searches listener registrations for the resource matching the path in a PDU.
  *
- * param[in] listener_ptr -- listener for found resource
- * param[in] resource_ptr -- found resource
+ * param[out] resource_ptr -- found resource
+ * param[out] listener_ptr -- listener for found resource
  */
 static void _find_resource(coap_pkt_t *pdu, coap_resource_t **resource_ptr,
                                             gcoap_listener_t **listener_ptr)
@@ -533,7 +532,7 @@ static int _find_obs_memo(gcoap_observe_memo_t **memo, sock_udp_ep_t *remote,
     for (int i = 0; i < GCOAP_OBS_REGISTRATIONS_MAX; i++) {
         sock_udp_ep_t *local_observer = NULL;
 
-        if (_coap_state.observe_memos[i].state == GCOAP_OBS_MEMO_UNUSED) {
+        if (_coap_state.observe_memos[i].observer == NULL) {
             empty_slot = i;
             continue;
         }
@@ -559,31 +558,23 @@ static int _find_obs_memo(gcoap_observe_memo_t **memo, sock_udp_ep_t *remote,
     return empty_slot;
 }
 
-void _send_observe_notification(gcoap_observe_memo_t *memo)
+/*
+ * Find registered observe memo for a resource.
+ *
+ * memo[out] -- Registered observe memo, or NULL if not found
+ * resource[in] -- Resource to match
+ */
+static void _find_obs_memo_resource(gcoap_observe_memo_t **memo,
+                                   const coap_resource_t *resource)
 {
-    uint8_t buf[GCOAP_PDU_BUF_SIZE];
-
-    ssize_t res = coap_build_hdr((coap_hdr_t *)buf, COAP_TYPE_NON, memo->token,
-                                                    memo->token_len,
-                                                    COAP_CODE_CONTENT,
-                                                  ++_coap_state.last_message_id);
-    if (res > 0) {
-        coap_pkt_t pdu;
-        uint32_t now      = xtimer_now_usec();
-        pdu.observe_value = (now >> GCOAP_OBS_TICK_EXPONENT) & 0xFFFFFF;
-
-        res = memo->resource->handler(&pdu, buf, GCOAP_PDU_BUF_SIZE);
-        if (res > 0) {
-            sock_udp_send(&_sock, buf, res, memo->observer);
-        }
-        else {
-            DEBUG("gcoap: Observe notification handler failed: %d\n", res);
+    *memo = NULL;
+    for (int i = 0; i < GCOAP_OBS_REGISTRATIONS_MAX; i++) {
+        if (_coap_state.observe_memos[i].observer != NULL
+                && _coap_state.observe_memos[i].resource == resource) {
+            *memo = &_coap_state.observe_memos[i];
+            break;
         }
     }
-    else {
-        DEBUG("gcoap: Observe notification can't build header: %d\n", res);
-    }
-    memo->state = GCOAP_OBS_MEMO_IDLE;
 }
 
 /*
@@ -752,6 +743,56 @@ int gcoap_resp_init(coap_pkt_t *pdu, uint8_t *buf, size_t len, unsigned code)
     return 0;
 }
 
+int gcoap_obs_init(coap_pkt_t *pdu, uint8_t *buf, size_t len,
+                                                  const coap_resource_t *resource)
+{
+    ssize_t hdrlen;
+    gcoap_observe_memo_t *memo = NULL;
+
+    _find_obs_memo_resource(&memo, resource);
+    if (memo == NULL) {
+        /* Unique return value to specify there is not an observer */
+        return -2;
+    }
+
+    pdu->hdr = (coap_hdr_t *)buf;
+    hdrlen   = coap_build_hdr(pdu->hdr, COAP_TYPE_NON, &memo->token[0],
+                                                       memo->token_len,
+                                                       COAP_CODE_CONTENT,
+                                                     ++_coap_state.last_message_id);
+    if (hdrlen > 0) {
+        uint32_t now       = xtimer_now_usec();
+        pdu->observe_value = (now >> GCOAP_OBS_TICK_EXPONENT) & 0xFFFFFF;
+
+        /* Reserve some space between the header and payload to write options later */
+        pdu->payload       = buf + coap_get_total_hdr_len(pdu) + GCOAP_OBS_OPTIONS_BUF;
+        /* Payload length really zero at this point, but we set this to the available
+         * length in the buffer. Allows us to reconstruct buffer length later. */
+        pdu->payload_len   = len - (pdu->payload - buf);
+        pdu->content_type  = COAP_FORMAT_NONE;
+
+        return 0;
+    }
+    else {
+        /* reason for negative hdrlen is not defined, so we also are vague */
+        return -1;
+    }
+}
+
+size_t gcoap_obs_send(uint8_t *buf, size_t len, const coap_resource_t *resource)
+{
+    gcoap_observe_memo_t *memo = NULL;
+
+    _find_obs_memo_resource(&memo, resource);
+
+    if (memo) {
+        return sock_udp_send(&_sock, buf, len, memo->observer);
+    }
+    else {
+        return 0;
+    }
+}
+
 void gcoap_op_state(uint8_t *open_reqs)
 {
     uint8_t count = 0;
@@ -763,28 +804,5 @@ void gcoap_op_state(uint8_t *open_reqs)
     *open_reqs = count;
 }
 
-void gcoap_resource_changed(coap_resource_t *resource)
-{
-    bool memo_found = false;
-    assert(resource != NULL);
-
-    /* find/update all memos for resource */
-    for (int i = 0; i < GCOAP_OBS_REGISTRATIONS_MAX; i++) {
-        if (_coap_state.observe_memos[i].resource == resource
-                && _coap_state.observe_memos[i].state == GCOAP_OBS_MEMO_IDLE) {
-            _coap_state.observe_memos[i].state = GCOAP_OBS_MEMO_PENDING;
-            memo_found = true;
-        }
-    }
-    /* interrupt sock listening to send Observe notification */
-    if (memo_found) {
-        msg_t mbox_msg;
-        mbox_msg.type          = GCOAP_MSG_TYPE_INTR;
-        mbox_msg.content.value = 0;
-        if (!mbox_try_put(&_sock.reg.mbox, &mbox_msg)) {
-            DEBUG("gcoap: can't wake up mbox; observers not notified\n");
-        }
-    }
-}
 
 /** @} */
