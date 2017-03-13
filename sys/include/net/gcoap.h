@@ -25,7 +25,9 @@
  * port, which supports RFC 6282 compression. Internally, gcoap depends on the
  * nanocoap package for base level structs and functionality.
  *
- * gcoap supports the Observe extension (RFC 7641) for a server.
+ * gcoap also supports the Observe extension (RFC 7641) for a server. gcoap
+ * provides functions to generate and send an observe notification that are
+ * similar to the functions to send a client request.
  *
  * ## Server Operation ##
  *
@@ -77,7 +79,7 @@
  *
  * ### Creating a request ###
  *
- * Here is the expected sequence for preparing and sending a request:
+ * Here is the expected sequence to prepare and send a request:
  *
  * Allocate a buffer and a coap_pkt_t for the request.
  *
@@ -111,19 +113,36 @@
  *    _content_type_ attributes.
  * -# Read the payload, if any.
  *
- * ## Observe Server
+ * ## Observe Server Operation
  *
  * A CoAP client may register for Observe notifications for any resource that
  * an application has registered with gcoap. An application does not need to
- * take any action to support Observe client registration.
+ * take any action to support Observe client registration. However, gcoap
+ * limits registration for a given resource to a _single_ observer.
  *
- * To send an Observe notification for a resource, an application must notify
- * gcoap when the resource changes, via gcoap_resource_changed(). gcoap then
- * asynchronously creates a notification (response) and executes the resource's
- * callback, which generates the payload. gcoap then sends the notification to
- * the endpoint for the Observe client.
+ * An Observe notification is considered a response to the original client
+ * registration request. So, the Observe server only needs to create and send
+ * the notification -- no further communication or callbacks are required.
  *
- * By default, the value for the Observe option in the notification is three
+ * ### Creating a notification ###
+ *
+ * Here is the expected sequence to prepare and send a notification:
+ *
+ * Allocate a buffer and a coap_pkt_t for the notification, then follow the
+ * steps below.
+ *
+ * -# Call gcoap_obs_init() to initialize the notification for a resource.
+ *    Test the return value, which may indicate there is not an observer for
+ *    the resource. If so, you are done.
+ * -# Write the notification payload, starting at the updated _payload_ pointer
+ *    in the coap_pkt_t.
+ * -# Call gcoap_finish(), which updates the packet for the payload.
+ *
+ * Finally, call gcoap_obs_send() for the resource.
+ *
+ * ### Settings ###
+ *
+ * By default, the value for the Observe option in a notification is three
  * bytes long. For resources that change slowly, this length can be reduced via
  * GCOAP_OBS_VALUE_WIDTH.
  *
@@ -336,7 +355,7 @@ typedef struct {
 
 /** @brief  Memo for Observe registration and notifications */
 typedef struct {
-    sock_udp_ep_t *observer;            /**< Client endpoint */
+    sock_udp_ep_t *observer;            /**< Client endpoint; unused if null */
     coap_resource_t *resource;          /**< Entity being observed */
     uint8_t token[GCOAP_TOKENLEN_MAX];  /**< Client token for notifications */
     unsigned token_len;                 /**< Actual length of token attribute */
@@ -520,7 +539,6 @@ int gcoap_obs_init(coap_pkt_t *pdu, uint8_t *buf, size_t len,
  *
  * @param[in] buf Buffer containing the PDU
  * @param[in] len Length of the buffer
- * @param[in] remote Destination for the packet
  * @param[in] resource Resource to send
  *
  * @return length of the packet
