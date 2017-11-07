@@ -431,6 +431,7 @@ typedef struct {
     unsigned state;                     /**< State of this memo, a GCOAP_MEMO... */
     uint8_t hdr_buf[GCOAP_HEADER_MAXLEN];
                                         /**< Stores a copy of the request header */
+    sock_udp_ep_t remote_ep;            /**< Remote endpoint */
     gcoap_resp_handler_t resp_handler;  /**< Callback for the response */
     xtimer_t response_timer;            /**< Limits wait for response */
     msg_t timeout_msg;                  /**< For response timer */
