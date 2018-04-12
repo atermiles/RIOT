@@ -19,7 +19,7 @@ static uint8_t internal_value = 0;
 
 static const uint8_t block2_intro[] = "This is RIOT (Version: ";
 static const uint8_t block2_board[] = " running on a ";
-static const uint8_t block2_mcu[] = " with a ";
+static const uint8_t block2_mcu[] = " board with a ";
 
 static ssize_t _riot_board_handler(coap_pkt_t *pkt, uint8_t *buf, size_t len, void *context)
 {
@@ -49,8 +49,12 @@ static ssize_t _riot_block2_handler(coap_pkt_t *pkt, uint8_t *buf, size_t len, v
     bufpos += coap_blockwise_put_bytes(&blk, bufpos, block2_mcu, sizeof(block2_mcu));
     bufpos += coap_blockwise_put_bytes(&blk, bufpos, (uint8_t*)RIOT_MCU, sizeof(RIOT_MCU));
     /* To demonstrate individual chars */
-
+    bufpos += coap_blockwise_put_char(&blk, bufpos, ' ');
+    bufpos += coap_blockwise_put_char(&blk, bufpos, 'M');
+    bufpos += coap_blockwise_put_char(&blk, bufpos, 'C');
+    bufpos += coap_blockwise_put_char(&blk, bufpos, 'U');
     bufpos += coap_blockwise_put_char(&blk, bufpos, '.');
+
 
     unsigned payload_len = bufpos - payload;
     return coap_block2_build_reply(pkt, COAP_CODE_205,
