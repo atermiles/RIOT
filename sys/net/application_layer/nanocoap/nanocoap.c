@@ -712,8 +712,8 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
         }
     }
     blk->opt = buf;
-    blk->start = blknum * 1 << (szx + 4);
-    blk->end = blk->start + (1 << (szx + 4));
+    blk->start = blknum * coap_szx2size(szx);
+    blk->end = blk->start + coap_szx2size(szx);
     blk->cur = 0;
     return coap_put_option_block2(buf, lastonum, blknum, szx, 1);
 }
@@ -722,7 +722,7 @@ ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
                         uint8_t *rbuf, unsigned rlen, unsigned payload_len,
                         coap_blockhelper_t *blk)
 {
-    if (blk->cur < blk->end) {
+    if (blk->cur < blk->start) {
         return coap_build_reply(pkt, COAP_CODE_BAD_OPTION, rbuf, rlen, 0);
     }
     int option_len;

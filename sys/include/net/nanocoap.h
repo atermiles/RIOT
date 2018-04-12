@@ -581,6 +581,17 @@ int coap_get_blockopt(coap_pkt_t *pkt, uint16_t option, uint32_t *blknum, unsign
 int coap_get_block1(coap_pkt_t *pkt, coap_block1_t *block1);
 
 /**
+ * @brief    Block2 option getter
+ *
+ * @param[in]   pkt     pkt to work on
+ * @param[out]  block1  ptr to preallocated coap_block1_t structure
+ *
+ * @returns     0 if block2 option not present
+ * @returns     1 if structure has been filled
+ */
+int coap_get_block2(coap_pkt_t *pkt, coap_block1_t *block2);
+
+/**
  * @brief   Insert block1 option into buffer
  *
  * @param[out]  buf         buffer to write to
