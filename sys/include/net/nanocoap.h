@@ -11,6 +11,88 @@
  * @ingroup     net
  * @brief       Provides CoAP functionality optimized for minimal resource usage
  *
+ * nanocoap provides a low-level interface to CoAP messaging to reduce and
+ * minimize resource usage. It also provides foundational structures and
+ * functions used by gcoap, RIOT's higher level interface.
+ *
+ * nanocoap includes both server-side request handling and response generation,
+ * and client-side request generation.
+ *
+ * ## Read Request ##
+ *
+ * For a server, nanocoap provides `coap_parse()` to read a message and
+ * generate structures that organize the message content. The primary structure
+ * is a `coap_pkt_t`, with elements for header, option, and payload information.
+ *
+ * The table below shows function name templates and attributes for access to
+ * the sections of the parsed message.
+ *
+ * Section | Description
+ * ------- | -----------
+ * Header  |`coap_get_xxx()`, like `coap_get_type()` and `coap_get_token_len()`
+ * Options |`coap_opt_get_xxx()`, for common options by name, like `coap_opt_get_uri_path()`
+ * Options |`coap_opt_get_xxx()`, for any option by value type, like `coap_opt_get_string()`
+ * Payload | coap_pkt_t `payload` and `payload_len`|
+ *
+ * ## Write Response ##
+ *
+ * The simplest responses may be generated with a single call to
+ * coap_reply_simple(). This function copies the provided payload into the
+ * buffer.
+ *
+ * Beyond simple responses, coap_build_reply() begins a response by writing the
+ * header. The user then may write options and the payload as described below.
+ *
+ * ## Write Request ##
+ *
+ * As a client, first write the request header with coap_build_hdr(). Then
+ * choose a mechanism below for writing options and the payload, if any.
+ *
+ * ## Write Options and Payload ##
+ *
+ * For both server responses and client requests, CoAP uses an Option mechanism
+ * to encode message metadata that is not required for each message. For
+ * example, the resource URI path is required only for a request, and is encoded
+ * as the Uri-Path option.
+ *
+ * nanocoap provides two APIs for writing CoAP options:
+ *
+ * - a convenient API that uses a coap_pkt_t struct to track each option as it
+ *   is written, and can anticipate a buffer overrun
+ *
+ * - a minimal API that requires only a reference to the buffer; however, the
+ *    caller must remember and provide the last option number written, as well
+ *    as the buffer position
+ *
+ * In either case, the caller *must* write options in order by option number.
+ * To manage resource use, nanocoap provides macros to enable each API.
+ *
+ * ### Higher-level, struct-based API ###
+ *
+ * First, use coap_pkt_init() to initialize the coap_pkt_t struct, including
+ * the array of options.
+ *
+ * Next, use the `coap_opt_add_xxx()` functions to write each option. These
+ * functions are provided in two flavors:
+ *
+ * - by name, for commonly used options, like coap_opt_add_ct()
+ *
+ * - by value type, for any option, like coap_opt_add_uint()
+ *
+ * Finally, write any message payload at the coap_pkt_t payload pointer
+ * attribute. The payload_len attribute provides the available length in the
+ * buffer.
+ *
+ * This API is enabled by the COAP_WRITE_OPTIONS_STRUCT macro.
+ *
+ * ### Minimal, buffer-based API ###
+ *
+ * Use the coap_opt_put_xxx() functions, which are provided by value type.
+ * While writing options, use the return value to track the space remaining in
+ * the buffer. Finally, write the payload, if any.
+ *
+ * This API is enabled by the COAP_WRITE_OPTIONS_BUFFER macro.
+ *
  * @{
  *
  * @file
