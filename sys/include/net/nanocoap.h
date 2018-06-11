@@ -64,8 +64,9 @@
  *    caller must remember and provide the last option number written, as well
  *    as the buffer position
  *
- * In either case, the caller *must* write options in order by option number.
- * To manage resource use, nanocoap provides macros to enable each API.
+ * In either case, the caller *must* write options in order by option number
+ * (see "CoAP option numbers"). To manage resource use, nanocoap provides macros
+ * to enable each API.
  *
  * ### Higher-level, struct-based API ###
  *
