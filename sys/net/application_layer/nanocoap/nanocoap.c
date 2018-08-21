@@ -609,6 +609,7 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
 {
     uint32_t blknum;
     unsigned szx;
+    /* kbee -- add comment: Read block request */
     if(coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &blknum, &szx) >= 0) {
         /* Use the smallest block size */
         if (NANOCOAP_BLOCK_SZX_MAX - 4 < szx ) {
@@ -616,12 +617,17 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
         }
     }
     blk->opt = buf;
+    /* kbee - Use blknum << (szx + 4) instead? */
     blk->start = blknum * coap_szx2size(szx);
     blk->end = blk->start + coap_szx2size(szx);
     blk->cur = 0;
     return coap_put_option_block2(buf, lastonum, blknum, szx, 1);
 }
 
+/* kbee - instead of this function, why not 'coap_block2_finalize(), then
+ * coap_build_reply(). A little extra work for client, but cleaner. I like
+ * coap_block2_init() / coap_block2_finalize() pair. Also makes it reusable
+ * for gcoap. */
 ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
                         uint8_t *rbuf, unsigned rlen, unsigned payload_len,
                         coap_blockhelper_t *blk)
@@ -644,6 +650,7 @@ ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
 size_t coap_blockwise_put_char(coap_blockhelper_t *blk, uint8_t *bufpos, char c)
 {
     /* Only copy the char if it is within the window */
+    /* kbee - Need parens for clarity */
     if (blk->start <=  blk->cur && blk->cur < blk->end) {
         *bufpos = c;
         blk->cur++;
@@ -692,7 +699,13 @@ ssize_t coap_well_known_core_default_handler(coap_pkt_t *pkt, uint8_t *buf, \
     bufpos += coap_block2_init(bufpos, COAP_OPT_CONTENT_FORMAT, pkt, &blk);
     *bufpos++ = 0xff;
 
+    /* kbee - add test here if finished writing the eligible window? No sense
+     * in continuing to count chars. */
     for (unsigned i = 0; i < coap_resources_numof; i++) {
+        /* kbee - Does it make sense to have a single function that handles
+         * both a block write as well as a plain buffer write (like *bufpos++ - 'x'),
+         * depending on whether coap_blockhelper_t is null? Use of this function
+         * allows testing for buffer overrun if not using block. */
         if (i) {
             bufpos += coap_blockwise_put_char(&blk, bufpos, ',');
         }

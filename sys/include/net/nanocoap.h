@@ -49,6 +49,7 @@ extern "C" {
  */
 #define NANOCOAP_NOPTS_MAX      (16)
 #define NANOCOAP_URI_MAX        (64)
+/* kbee -- should this just be COAP_BLOCK_SZX_MAX? It's not specififc to nanocoap. */
 #define NANOCOAP_BLOCK_SZX_MAX  (6)
 /** @} */
 
@@ -221,6 +222,7 @@ extern "C" {
 #define COAP_BLOCKWISE_NUM_OFF  (4)
 #define COAP_BLOCKWISE_MORE_OFF (3)
 #define COAP_BLOCKWISE_SZX_MASK (0x07)
+/* kbee - if this is useless, let's get rid of it */
 #define COAP_BLOCKWISE_SZX_MAX  (7)
 /** @} */
 
@@ -286,6 +288,7 @@ typedef struct {
                                           1 for more blocks coming          */
 } coap_block1_t;
 
+/* kbee - Rename to coap_blockbuilder_t to be more descriptive? */
 /**
  * @brief Blockwise transfer helper struct
  */
