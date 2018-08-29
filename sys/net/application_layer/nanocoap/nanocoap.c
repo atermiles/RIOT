@@ -552,6 +552,7 @@ int coap_get_block1(coap_pkt_t *pkt, coap_block1_t *block1)
 
 int coap_get_block2(coap_pkt_t *pkt, coap_block1_t *block2)
 {
+    /* kbee -- populate block2 'more' attribute? */
     return coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &block2->blknum, &block2->szx);
 }
 
@@ -609,15 +610,17 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
 {
     uint32_t blknum;
     unsigned szx;
-    /* kbee -- add comment: Read block request */
+    /* kbee -- add comment: Read block request
+     * add space after 'if' */
     if(coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &blknum, &szx) >= 0) {
         /* Use the smallest block size */
+        /* kbee -- szx = 2 is 64, not the smallest block size, which is 16.
+         * Also remove space before ' )', add space between '=N' */
         if (NANOCOAP_BLOCK_SZX_MAX - 4 < szx ) {
             szx =NANOCOAP_BLOCK_SZX_MAX - 4;
         }
     }
     blk->opt = buf;
-    /* kbee - Use blknum << (szx + 4) instead? */
     blk->start = blknum * coap_szx2size(szx);
     blk->end = blk->start + coap_szx2size(szx);
     blk->cur = 0;

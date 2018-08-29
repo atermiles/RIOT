@@ -277,6 +277,7 @@ typedef struct {
     void *context;                  /**< ptr to user defined context data   */
 } coap_resource_t;
 
+/* kbee - Rename to coap_block_t */
 /**
  * @brief   Block1 helper struct
  */
@@ -288,7 +289,8 @@ typedef struct {
                                           1 for more blocks coming          */
 } coap_block1_t;
 
-/* kbee - Rename to coap_blockbuilder_t to be more descriptive? */
+/* kbee - Rename to coap_blockbuilder_t to be more descriptive? 
+ *        Extra space in description of 'cur' attribute         */
 /**
  * @brief Blockwise transfer helper struct
  */
@@ -523,6 +525,7 @@ size_t coap_put_option_block1(uint8_t *buf, uint16_t lastonum, unsigned blknum, 
  */
 size_t coap_put_block1_ok(uint8_t *pkt_pos, coap_block1_t *block1, uint16_t lastonum);
 
+/* kbee -- change to coap_opt_put_block2() */
 /**
  * @brief   Insert block2 option into buffer
  *
