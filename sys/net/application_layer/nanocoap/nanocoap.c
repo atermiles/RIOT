@@ -722,7 +722,7 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
     return coap_opt_put_block2(buf, lastonum, blknum, szx, 1);
 }
 
-size_t coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk)
+void coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk)
 {
     int option_len;
     uint16_t delta;
@@ -733,7 +733,7 @@ size_t coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk)
     unsigned szx = blkopt & COAP_BLOCKWISE_SZX_MASK;
     int more = (blk->cur > blk->end) ? 0x80 : 0;
 
-    return coap_opt_put_block2(blk->opt, COAP_OPT_BLOCK2 - delta, blknum, szx,
+    coap_opt_put_block2(blk->opt, COAP_OPT_BLOCK2 - delta, blknum, szx,
             more);
 }
 

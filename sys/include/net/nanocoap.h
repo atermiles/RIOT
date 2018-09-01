@@ -818,6 +818,20 @@ static inline ssize_t coap_get_location_query(const coap_pkt_t *pkt,
 size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_blockbuilder_t *blk);
 
 /**
+ * @brief Finish a block2 response
+ *
+ * This function finalizes the block2 response header
+ *
+ * Checks whether the `more` bit should be set in the block2 option and
+ * sets/clears it if required.  Doesn't return the number of bytes as this
+ * overwrites bytes in the packet, it doesn't add new bytes to the packet.
+ *
+ * @param[in]   pkt         packet to work on
+ * @param[out]  blk         Preallocated blockbuilder struct to use
+ */
+coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk);
+
+/**
  * @brief   Build reply to CoAP block2 request
  *
  * This function can be used to create a reply to a CoAP block2 request
