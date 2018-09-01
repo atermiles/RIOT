@@ -31,7 +31,7 @@ static ssize_t _riot_board_handler(coap_pkt_t *pkt, uint8_t *buf, size_t len, vo
 static ssize_t _riot_block2_handler(coap_pkt_t *pkt, uint8_t *buf, size_t len, void *context)
 {
     (void)context;
-    coap_blockhelper_t blk;
+    coap_blockbuilder_t blk;
     uint8_t *payload = buf + coap_get_total_hdr_len(pkt);
 
     uint8_t *bufpos = payload;
