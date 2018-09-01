@@ -722,22 +722,30 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
     return coap_opt_put_block2(buf, lastonum, blknum, szx, 1);
 }
 
-ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
-                        uint8_t *rbuf, unsigned rlen, unsigned payload_len,
-                        coap_blockbuilder_t *blk)
+size_t coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk)
 {
-    if (blk->cur < blk->start) {
-        return coap_build_reply(pkt, COAP_CODE_BAD_OPTION, rbuf, rlen, 0);
-    }
     int option_len;
     uint16_t delta;
+    /* Retrieve the block2 option from the constructed packet */
     uint8_t *data_start = _parse_option(pkt, blk->opt, &delta, &option_len);
     uint32_t blkopt = _decode_uint(data_start, option_len);
     uint32_t blknum = blkopt >> COAP_BLOCKWISE_NUM_OFF;
     unsigned szx = blkopt & COAP_BLOCKWISE_SZX_MASK;
     int more = (blk->cur > blk->end) ? 0x80 : 0;
 
-    coap_opt_put_block2(blk->opt, COAP_OPT_BLOCK2 - delta, blknum, szx, more);
+    return coap_opt_put_block2(blk->opt, COAP_OPT_BLOCK2 - delta, blknum, szx,
+            more);
+}
+
+ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
+                        uint8_t *rbuf, unsigned rlen, unsigned payload_len,
+                        coap_blockbuilder_t *blk)
+{
+    /* Check if the generated data filled the requested block */
+    if (blk->cur < blk->start) {
+        return coap_build_reply(pkt, COAP_CODE_BAD_OPTION, rbuf, rlen, 0);
+    }
+    coap_block2_finish(pkt, blk);
     return coap_build_reply(pkt, code, rbuf, rlen, payload_len);
 }
 
