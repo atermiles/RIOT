@@ -50,10 +50,10 @@ extern "C" {
  * @name    Nanocoap specific maximum values
  * @{
  */
-#define NANOCOAP_NOPTS_MAX      (16)
-#define NANOCOAP_URI_MAX        (64)
-#define NANOCOAP_BLOCK_SZX_MAX  (6)  /**< Maximum size for a blockwise
-                                       *  transfer as power of 2 */
+#define NANOCOAP_NOPTS_MAX          (16)
+#define NANOCOAP_URI_MAX            (64)
+#define NANOCOAP_BLOCK_SIZE_EXP_MAX  (6)  /**< Maximum size for a blockwise
+                                            *  transfer as power of 2 */
 /** @} */
 
 #ifdef MODULE_GCOAP
@@ -313,7 +313,7 @@ typedef struct {
     size_t end;                     /**< End offset of the current block    */
     size_t cur;                     /**< Offset of the generated content    */
     uint8_t *opt;                   /**< Pointer to the placed option       */
-} coap_blockbuilder_t;
+} coap_block_slicer_t;
 
 /**
  * @brief   Global CoAP resource list
@@ -811,11 +811,11 @@ static inline ssize_t coap_get_location_query(const coap_pkt_t *pkt,
  * @param[in]   buf         buffer to write to
  * @param[in]   lastonum    last option number (must be <27)
  * @param[in]   pkt         packet to work on
- * @param[out]  blk         Preallocated blockbuilder struct to fill
+ * @param[out]  slicer      Preallocated slicer struct to fill
  *
  * @returns     amount of bytes written to @p buf
  */
-size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_blockbuilder_t *blk);
+size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_block_slicer_t *slicer);
 
 /**
  * @brief Finish a block2 response
@@ -827,9 +827,9 @@ size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_b
  * overwrites bytes in the packet, it doesn't add new bytes to the packet.
  *
  * @param[in]   pkt         packet to work on
- * @param[out]  blk         Preallocated blockbuilder struct to use
+ * @param[out]  slicer      Preallocated slicer struct to use
  */
-coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk);
+void coap_block2_finish(coap_pkt_t *pkt, coap_block_slicer_t *slicer);
 
 /**
  * @brief   Build reply to CoAP block2 request
@@ -843,14 +843,14 @@ coap_block2_finish(coap_pkt_t *pkt, coap_blockbuilder_t *blk);
  * @param[out]  rbuf        buffer to write reply to
  * @param[in]   rlen        size of @p rbuf
  * @param[in]   payload_len length of payload
- * @param[in]   blk         blockbuilder to use
+ * @param[in]   slicer      slicer to use
  *
  * @returns     size of reply packet on success
  * @returns     <0 on error
  */
 ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
                         uint8_t *rbuf, unsigned rlen, unsigned payload_len,
-                        coap_blockbuilder_t *blk);
+                        coap_block_slicer_t *slicer);
 
 /**
  * @brief Add a single character to a block2 reply.
@@ -859,13 +859,13 @@ ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
  * checks whether the character should be added to the buffer and ignores it
  * when the character is outside the current block2 request.
  *
- * @param[in]   blk         blockbuilder to use
+ * @param[in]   slicer      slicer to use
  * @param[in]   bufpos      pointer to the current payload buffer position
  * @param[in]   c           character to write
  *
  * @returns     Number of bytes writen to @p bufpos
  */
-size_t coap_blockwise_put_char(coap_blockbuilder_t *blk, uint8_t *bufpos, char c);
+size_t coap_blockwise_put_char(coap_block_slicer_t *slicer, uint8_t *bufpos, char c);
 
 /**
  * @brief Add a byte array to a block2 reply.
@@ -874,14 +874,14 @@ size_t coap_blockwise_put_char(coap_blockbuilder_t *blk, uint8_t *bufpos, char c
  * checks which parts of the string should be added to the reply and ignores
  * parts that are outside the current block2 request.
  *
- * @param[in]   blk         blockbuilder to use
+ * @param[in]   slicer      slicer to use
  * @param[in]   bufpos      pointer to the current payload buffer position
  * @param[in]   c           byte array to copy
  * @param[in]   len         length of the byte array
  *
  * @returns     Number of bytes writen to @p bufpos
  */
-size_t coap_blockwise_put_bytes(coap_blockbuilder_t *blk, uint8_t *bufpos,
+size_t coap_blockwise_put_bytes(coap_block_slicer_t *slicer, uint8_t *bufpos,
                                 const uint8_t *c, size_t len);
 
 /**
