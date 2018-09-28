@@ -674,16 +674,19 @@ ssize_t coap_opt_finish(coap_pkt_t *pkt, uint16_t flags);
 /**
  * @brief   Insert block2 option into buffer
  *
+ * When calling this function to initialize a packet with a block2 option, the
+ * more flag must be set to prevent the creation of an option with a length too
+ * small to contain the size bit.
+ *
  * @param[out]  buf         buffer to write to
  * @param[in]   lastonum    number of previous option (for delta calculation),
  *                          must be < 27
- * @param[in]   blknum      block number
- * @param[in]   szx         SXZ value
+ * @param[in]   slicer      coap blockwise slicer helper struct
  * @param[in]   more        more flag (1 or 0)
  *
  * @returns     amount of bytes written to @p buf
  */
-size_t coap_opt_put_block2(uint8_t *buf, uint16_t lastonum, unsigned blknum, unsigned szx, int more);
+size_t coap_opt_put_block2(uint8_t *buf, uint16_t lastonum, coap_block_slicer_t *slicer, bool more);
 
 /**
  * @brief   Get content type from packet
@@ -800,7 +803,7 @@ static inline ssize_t coap_get_location_query(const coap_pkt_t *pkt,
 }
 
 /**
- * @brief Initialize a block2 response
+ * @brief Initialize a block2 slicer struct
  *
  * This function initializes a block2 response and adds the block2 option to
  * the packet
@@ -815,7 +818,7 @@ static inline ssize_t coap_get_location_query(const coap_pkt_t *pkt,
  *
  * @returns     amount of bytes written to @p buf
  */
-size_t coap_block2_init(uint8_t* buf, uint16_t lastonum, coap_pkt_t *pkt, coap_block_slicer_t *slicer);
+void coap_block2_init(coap_pkt_t *pkt, coap_block_slicer_t *slicer);
 
 /**
  * @brief Finish a block2 response
