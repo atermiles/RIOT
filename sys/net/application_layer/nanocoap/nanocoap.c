@@ -592,7 +592,7 @@ int coap_get_block1(coap_pkt_t *pkt, coap_block1_t *block1)
     return (block1->more >= 0);
 }
 
-int coap_opt_get_block2(coap_pkt_t *pkt, coap_block1_t *block2)
+int coap_get_block2(coap_pkt_t *pkt, coap_block1_t *block2)
 {
     block2->more = coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &block2->blknum,
             &block2->szx);

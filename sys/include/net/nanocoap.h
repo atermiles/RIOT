@@ -590,7 +590,7 @@ int coap_get_block1(coap_pkt_t *pkt, coap_block1_t *block1);
  * @returns     0 if block2 option not present
  * @returns     1 if structure has been filled
  */
-int coap_opt_get_block2(coap_pkt_t *pkt, coap_block1_t *block2);
+int coap_get_block2(coap_pkt_t *pkt, coap_block1_t *block2);
 
 /**
  * @brief   Insert block1 option into buffer
