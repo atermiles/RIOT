@@ -12,6 +12,31 @@
  * @ingroup     net
  * @brief       Provides CoAP functionality optimized for minimal resource usage
  *
+ * # Create a Block Response (Block2)
+ *
+ * Block is a CoAP extension (RFC 7959) to divide a large response payload
+ * across multiple physical packets. This section describes how to write a
+ * block for a response, and is known as Block2. (Block1 is for a block in a
+ * request.) See _riot_board_handler() in the nanocoap_server example for an
+ * example implementation.
+ *
+ * Start with coap_block2_init() to read the client request and initialize a
+ * coap_slicer_t struct with the size and location for this slice of the
+ * overall payload. Then write the block2 option in the response with
+ * coap_opt_put_block2(). The option includes an indicator ("more") that a
+ * slice completes the overall payload transfer. You may not know the value for
+ * _more_ at this point, but you must initialize the space in the packet for
+ * the option before writing the payload. The option is rewritten later.
+ *
+ * Next, use the coap_blockwise_put_xxx() functions to write the payload
+ * content. These functions use the coap_block_slicer_t to enable or disable
+ * actually writing the content, depending on the current position within the
+ * overall payload transfer.
+ *
+ * Finally, use the convenience function coap_block2_build_reply(), which
+ * finalizes the packet and calls coap_block2_finish() internally to update
+ * the block2 option.
+ *
  * @{
  *
  * @file
