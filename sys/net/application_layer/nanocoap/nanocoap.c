@@ -736,11 +736,11 @@ void coap_block2_init(coap_pkt_t *pkt, coap_block_slicer_t *slicer)
     uint32_t blknum;
     unsigned szx;
     /* Retrieve the block2 option from the client request */
-    if(coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &blknum, &szx) >= 0) {
+    if (coap_get_blockopt(pkt, COAP_OPT_BLOCK2, &blknum, &szx) >= 0) {
         /* Use the client requested block size if it is smaller than our own
          * maximum block size */
-        if (NANOCOAP_BLOCK_SIZE_EXP_MAX - 4 < szx ) {
-            szx =NANOCOAP_BLOCK_SIZE_EXP_MAX - 4;
+        if (NANOCOAP_BLOCK_SIZE_EXP_MAX - 4 < szx) {
+            szx = NANOCOAP_BLOCK_SIZE_EXP_MAX - 4;
         }
     }
     slicer->start = blknum * coap_szx2size(szx);
@@ -756,8 +756,7 @@ void coap_block2_finish(coap_pkt_t *pkt, coap_block_slicer_t *slicer)
     _parse_option(pkt, slicer->opt, &delta, &option_len);
     int more = (slicer->cur > slicer->end) ? 0x80 : 0;
 
-    coap_opt_put_block2(slicer->opt, COAP_OPT_BLOCK2 - delta, slicer,
-            more);
+    coap_opt_put_block2(slicer->opt, COAP_OPT_BLOCK2 - delta, slicer, more);
 }
 
 ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
@@ -775,7 +774,7 @@ ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
 size_t coap_blockwise_put_char(coap_block_slicer_t *slicer, uint8_t *bufpos, char c)
 {
     /* Only copy the char if it is within the window */
-    if ((slicer->start <=  slicer->cur) && (slicer->cur < slicer->end)) {
+    if ((slicer->start <= slicer->cur) && (slicer->cur < slicer->end)) {
         *bufpos = c;
         slicer->cur++;
         return 1;

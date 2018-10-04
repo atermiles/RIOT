@@ -585,7 +585,7 @@ int coap_get_block1(coap_pkt_t *pkt, coap_block1_t *block1);
  * @brief    Block2 option getter
  *
  * @param[in]   pkt     pkt to work on
- * @param[out]  block1  ptr to preallocated coap_block1_t structure
+ * @param[out]  block2  ptr to preallocated coap_block1_t structure
  *
  * @returns     0 if block2 option not present
  * @returns     1 if structure has been filled
