@@ -803,20 +803,13 @@ static inline ssize_t coap_get_location_query(const coap_pkt_t *pkt,
 }
 
 /**
- * @brief Initialize a block2 slicer struct
+ * @brief Initialize a block2 slicer struct for writing the payload
  *
- * This function initializes a block2 response and adds the block2 option to
- * the packet
+ * This function determines the size of the response payload based on the
+ * size requested by the client in @p pkt.
  *
- * Caller must ensure that this function is called after all required
- * preceding options are added
- *
- * @param[in]   buf         buffer to write to
- * @param[in]   lastonum    last option number (must be <27)
  * @param[in]   pkt         packet to work on
  * @param[out]  slicer      Preallocated slicer struct to fill
- *
- * @returns     amount of bytes written to @p buf
  */
 void coap_block2_init(coap_pkt_t *pkt, coap_block_slicer_t *slicer);
 
