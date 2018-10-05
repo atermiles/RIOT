@@ -748,12 +748,15 @@ void coap_block2_init(coap_pkt_t *pkt, coap_block_slicer_t *slicer)
     slicer->cur = 0;
 }
 
-void coap_block2_finish(coap_pkt_t *pkt, coap_block_slicer_t *slicer)
+void coap_block2_finish(coap_block_slicer_t *slicer)
 {
-    int option_len;
-    uint16_t delta;
-    /* Retrieve the block2 option from the constructed packet */
-    _parse_option(pkt, slicer->opt, &delta, &option_len);
+    assert(slicer->opt);
+
+    /* The third parameter for _decode_value() points to the end of the header.
+     * We don't know this position, but we know we can read the option because
+     * it's already in the buffer. So just point past the option. */
+    uint8_t *pos = slicer->opt + 1;
+    uint16_t delta = _decode_value(*slicer->opt >> 4, &pos, slicer->opt + 3);
     int more = (slicer->cur > slicer->end) ? 0x80 : 0;
 
     coap_opt_put_block2(slicer->opt, COAP_OPT_BLOCK2 - delta, slicer, more);
@@ -767,7 +770,7 @@ ssize_t coap_block2_build_reply(coap_pkt_t *pkt, unsigned code,
     if (slicer->cur < slicer->start) {
         return coap_build_reply(pkt, COAP_CODE_BAD_OPTION, rbuf, rlen, 0);
     }
-    coap_block2_finish(pkt, slicer);
+    coap_block2_finish(slicer);
     return coap_build_reply(pkt, code, rbuf, rlen, payload_len);
 }
 

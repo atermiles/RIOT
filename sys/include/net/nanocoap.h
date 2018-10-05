@@ -847,10 +847,9 @@ void coap_block2_init(coap_pkt_t *pkt, coap_block_slicer_t *slicer);
  * sets/clears it if required.  Doesn't return the number of bytes as this
  * overwrites bytes in the packet, it doesn't add new bytes to the packet.
  *
- * @param[in]   pkt         packet to work on
- * @param[out]  slicer      Preallocated slicer struct to use
+ * @param[inout]  slicer      Preallocated slicer struct to use
  */
-void coap_block2_finish(coap_pkt_t *pkt, coap_block_slicer_t *slicer);
+void coap_block2_finish(coap_block_slicer_t *slicer);
 
 /**
  * @brief   Build reply to CoAP block2 request
