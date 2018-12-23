@@ -17,7 +17,6 @@ USEMODULE += nanocoap_sock
 
 # Required by test
 USEMODULE += od
-# Add also the shell, some shell commands
 USEMODULE += shell
 
 include $(RIOTBASE)/Makefile.include
