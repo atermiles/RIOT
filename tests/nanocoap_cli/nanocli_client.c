@@ -28,7 +28,6 @@
 #include "net/nanocoap_sock.h"
 #include "net/sock/udp.h"
 #include "od.h"
-#include "xtimer.h"
 
 static ssize_t _send(coap_pkt_t *pkt, size_t len, char *addr_str, char *port_str)
 {
@@ -106,7 +105,6 @@ int nanotest_client_cmd(int argc, char **argv)
 
     /* parse options */
     if (argc == 5 || argc == 6) {
-        uint32_t elapsed = xtimer_now_usec();
         ssize_t hdrlen = coap_build_hdr(pkt.hdr, COAP_TYPE_CON, &token[0], 2,
                                         code_pos+1, 1);
         coap_pkt_init(&pkt, &buf[0], buflen, hdrlen);
@@ -122,10 +120,9 @@ int nanotest_client_cmd(int argc, char **argv)
         else {
             len = coap_opt_finish(&pkt, COAP_OPT_FINISH_NONE);
         }
-        elapsed = xtimer_now_usec() - elapsed;
 
-        printf("nanotest: sending msg ID %u, %u bytes, built in %" PRIu32 " usec\n",
-                coap_get_id(&pkt), (unsigned) len, elapsed);
+        printf("nanotest: sending msg ID %u, %u bytes\n", coap_get_id(&pkt),
+               (unsigned) len);
 
         ssize_t res = _send(&pkt, buflen, argv[2], argv[3]);
         if (res < 0) {
