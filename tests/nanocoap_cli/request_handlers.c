@@ -26,6 +26,8 @@
 #include "fmt.h"
 #include "net/nanocoap.h"
 
+#define _MAX_PAYLOAD_LEN  (16)
+
 /* internal value that can be read/written via CoAP */
 static uint8_t internal_value = 0;
 
@@ -35,7 +37,7 @@ static ssize_t _value_handler(coap_pkt_t *pkt, uint8_t *buf, size_t len, void *c
 
     ssize_t p = 0;
     char rsp[16];
-    unsigned code = COAP_CODE_EMPTY;
+    unsigned code;
 
     /* read coap method type in packet */
     unsigned method_flag = coap_method2flag(coap_get_code_detail(pkt));
@@ -50,11 +52,19 @@ static ssize_t _value_handler(coap_pkt_t *pkt, uint8_t *buf, size_t len, void *c
     case COAP_POST:
     {
         /* convert the payload to an integer and update the internal value */
-        char payload[16] = { 0 };
-        memcpy(payload, (char*)pkt->payload, pkt->payload_len);
-        internal_value = strtol(payload, NULL, 10);
+        if (pkt->payload_len <= _MAX_PAYLOAD_LEN) {
+            char payload[_MAX_PAYLOAD_LEN+1] = { 0 };
+            memcpy(payload, (char*)pkt->payload, pkt->payload_len);
+            internal_value = strtol(payload, NULL, 10);
+        }
+        else {
+            internal_value = 0;
+        }
         code = COAP_CODE_CHANGED;
+        break;
     }
+    default:
+        code = COAP_CODE_METHOD_NOT_ALLOWED;
     }
 
     return coap_reply_simple(pkt, code, buf, len,
