@@ -38,6 +38,7 @@ int nanotest_server_cmd(int argc, char **argv)
 {
     if (argc == 2) {
         if (strncmp("start", argv[1], 5) == 0) {
+            puts("starting server\n");
             _start_server();
             return 0;
         }
