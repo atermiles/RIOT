@@ -49,7 +49,7 @@ static ssize_t _send(coap_pkt_t *pkt, size_t len, char *addr_str, char *port_str
     }
     else {
         if (gnrc_netif_get_by_pid(iface) == NULL) {
-            puts("nanotest: interface not valid");
+            puts("nanocli: interface not valid");
             return 0;
         }
         remote.netif = iface;
@@ -57,11 +57,11 @@ static ssize_t _send(coap_pkt_t *pkt, size_t len, char *addr_str, char *port_str
 
     /* parse destination address */
     if (ipv6_addr_from_str(&addr, addr_str) == NULL) {
-        puts("nanotest: unable to parse destination address");
+        puts("nanocli: unable to parse destination address");
         return 0;
     }
     if ((remote.netif == SOCK_ADDR_ANY_NETIF) && ipv6_addr_is_link_local(&addr)) {
-        puts("nanotest: must specify interface for link local target");
+        puts("nanocli: must specify interface for link local target");
         return 0;
     }
     memcpy(&remote.addr.ipv6[0], &addr.u8[0], sizeof(addr.u8));
@@ -69,7 +69,7 @@ static ssize_t _send(coap_pkt_t *pkt, size_t len, char *addr_str, char *port_str
     /* parse port */
     remote.port = atoi(port_str);
     if (remote.port == 0) {
-        puts("nanotest: unable to parse destination port");
+        puts("nanocli: unable to parse destination port");
         return 0;
     }
 
@@ -121,17 +121,17 @@ int nanotest_client_cmd(int argc, char **argv)
             len = coap_opt_finish(&pkt, COAP_OPT_FINISH_NONE);
         }
 
-        printf("nanotest: sending msg ID %u, %u bytes\n", coap_get_id(&pkt),
+        printf("nanocli: sending msg ID %u, %u bytes\n", coap_get_id(&pkt),
                (unsigned) len);
 
         ssize_t res = _send(&pkt, buflen, argv[2], argv[3]);
         if (res < 0) {
-            printf("nanotest: msg send failed: %d\n", (int)res);
+            printf("nanocli: msg send failed: %d\n", (int)res);
         }
         else {
             char *class_str = (coap_get_code_class(&pkt) == COAP_CLASS_SUCCESS)
                                     ? "Success" : "Error";
-            printf("nanotest: response %s, code %1u.%02u", class_str,
+            printf("nanocli: response %s, code %1u.%02u", class_str,
                    coap_get_code_class(&pkt), coap_get_code_detail(&pkt));
             if (pkt.payload_len) {
                 unsigned format = coap_get_content_type(&pkt);

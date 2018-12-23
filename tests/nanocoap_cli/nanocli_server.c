@@ -45,7 +45,7 @@ int nanotest_server_cmd(int argc, char **argv)
         if (argc == 3) {
             port = atoi(argv[2]);
             if (port == 0) {
-                puts("nanotest: unable to parse port");
+                puts("nanocli: unable to parse port");
                 return 1;
             }
         }
