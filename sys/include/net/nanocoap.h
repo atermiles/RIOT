@@ -688,6 +688,49 @@ static inline size_t coap_opt_put_block2(uint8_t *buf, uint16_t lastonum,
 }
 
 /**
+ * @brief   Insert block option into buffer in control usage
+ *
+ * @param[in]   buf         buffer to write to
+ * @param[in]   block       block option attribute struct
+ * @param[in]   lastonum    last option number (must be < @p option)
+ * @param[in]   option      option number (block1 or block2)
+ *
+ * @returns     amount of bytes written to @p buf
+ */
+size_t coap_opt_put_block_control(uint8_t *buf, coap_block1_t *block, uint16_t lastonum,
+                                  uint16_t option);
+
+/**
+ * @brief   Insert block1 option into buffer in control usage
+ *
+ * @param[in]   buf         buffer to write to
+ * @param[in]   block1      block option attribute struct
+ * @param[in]   lastonum    last option number (must be < 27)
+ *
+ * @returns     amount of bytes written to @p buf
+ */
+static inline size_t coap_opt_put_block1_control(uint8_t *buf, coap_block1_t *block,
+                                                 uint16_t lastonum)
+{
+    return coap_opt_put_block_control(buf, block, lastonum, COAP_OPT_BLOCK1);
+}
+
+/**
+ * @brief   Insert block2 option into buffer in control usage
+ *
+ * @param[in]   buf         buffer to write to
+ * @param[in]   block1      block option attribute struct
+ * @param[in]   lastonum    last option number (must be < 27)
+ *
+ * @returns     amount of bytes written to @p buf
+ */
+static inline size_t coap_opt_put_block2_control(uint8_t *buf, coap_block1_t *block,
+                                                 uint16_t lastonum)
+{
+    return coap_opt_put_block_control(buf, block, lastonum, COAP_OPT_BLOCK2);
+}
+
+/**
  * @brief   Get content type from packet
  *
  * @param[in]   pkt     packet to work on
